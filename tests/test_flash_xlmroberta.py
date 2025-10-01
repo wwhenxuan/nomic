@@ -4,7 +4,9 @@ from collections import OrderedDict
 import pytest
 import torch
 from transformers import XLMRobertaConfig
-from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel as XLMRobertaModelHF
+from transformers.models.xlm_roberta.modeling_xlm_roberta import (
+    XLMRobertaModel as XLMRobertaModelHF,
+)
 
 from contrastors.models.encoder.bert import bert_config_to_nomic_config
 from contrastors.models.encoder.modeling_nomic_bert import NomicBertModel
@@ -19,13 +21,17 @@ def get_hf_models(model_name, config, dtype):
         key = re.sub(r"LayerNorm.beta$", "LayerNorm.bias", key)
         return key
 
-    pretrained_state_dict = OrderedDict((key_mapping_ln_gamma_beta(k), v) for k, v in pretrained_state_dict.items())
+    pretrained_state_dict = OrderedDict(
+        (key_mapping_ln_gamma_beta(k), v) for k, v in pretrained_state_dict.items()
+    )
 
     def remove_bert_prefix(key):
         key = re.sub(r"^roberta\.", "", key)
         return key
 
-    pretrained_state_dict = OrderedDict((remove_bert_prefix(k), v) for k, v in pretrained_state_dict.items())
+    pretrained_state_dict = OrderedDict(
+        (remove_bert_prefix(k), v) for k, v in pretrained_state_dict.items()
+    )
 
     model_hf = XLMRobertaModelHF(config, add_pooling_layer=True)
     # Missing key(s) in state_dict: "bert.embeddings.position_ids", "cls.predictions.decoder.bias"
@@ -60,32 +66,48 @@ def test_flash_bert(model_name):
     torch.manual_seed(0)
     batch_size = 4
     max_seqlen = 512
-    seqlens = torch.randint(max_seqlen // 2, max_seqlen + 1, (batch_size,), device="cuda")
+    seqlens = torch.randint(
+        max_seqlen // 2, max_seqlen + 1, (batch_size,), device="cuda"
+    )
     attention_mask = torch.arange(max_seqlen, device="cuda")[None, :] < seqlens[:, None]
-    input_ids = torch.randint(0, config.vocab_size, (batch_size, max_seqlen), dtype=torch.long, device="cuda")
+    input_ids = torch.randint(
+        0, config.vocab_size, (batch_size, max_seqlen), dtype=torch.long, device="cuda"
+    )
     # xlm-roberta offsets with position ids from pad_idx + 1
-    position_ids = torch.arange(2, max_seqlen + 2, device="cuda")[None, :].expand(batch_size, -1)
+    position_ids = torch.arange(2, max_seqlen + 2, device="cuda")[None, :].expand(
+        batch_size, -1
+    )
     out = model(input_ids, attention_mask=attention_mask, position_ids=position_ids)
     sequence_output, pooled_output = out.last_hidden_state, out.pooler_output
-    out_hf = model_hf(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+    out_hf = model_hf(
+        input_ids, attention_mask=attention_mask, position_ids=position_ids
+    )
     sequence_output_hf, pooled_output_hf = (
         out_hf.last_hidden_state,
         out_hf.pooler_output,
     )
     sequence_output_hf[~attention_mask, :] = 0.0
-    out_ref = model_ref(input_ids, attention_mask=attention_mask, position_ids=position_ids)
+    out_ref = model_ref(
+        input_ids, attention_mask=attention_mask, position_ids=position_ids
+    )
     sequence_output_ref, pooled_output_ref = (
         out_ref.last_hidden_state,
         out_ref.pooler_output,
     )
     sequence_output_ref[~attention_mask, :] = 0.0
 
-    print(f"Max diff between flash and hf fp32: {(sequence_output - sequence_output_ref).abs().max().item()}")
-    print(f"Mean diff between flash and hf {dtype}: {(sequence_output - sequence_output_ref).abs().mean().item()}")
-    print(f"Max diff between HF fp32 and {dtype}: {(sequence_output_hf - sequence_output_ref).abs().max().item()}")
-    print(f"Mean diff between HF fp32 and {dtype}: {(sequence_output_hf - sequence_output_ref).abs().mean().item()}")
-
-
+    print(
+        f"Max diff between flash and hf fp32: {(sequence_output - sequence_output_ref).abs().max().item()}"
+    )
+    print(
+        f"Mean diff between flash and hf {dtype}: {(sequence_output - sequence_output_ref).abs().mean().item()}"
+    )
+    print(
+        f"Max diff between HF fp32 and {dtype}: {(sequence_output_hf - sequence_output_ref).abs().max().item()}"
+    )
+    print(
+        f"Mean diff between HF fp32 and {dtype}: {(sequence_output_hf - sequence_output_ref).abs().mean().item()}"
+    )
 
     assert (sequence_output - sequence_output_ref).abs().max().item() < 3 * (
         sequence_output_hf - sequence_output_ref

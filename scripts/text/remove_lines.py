@@ -10,7 +10,7 @@ buckets = list(Path(f"/tmp/{bucket}").glob("*"))
 
 for key in buckets:
     if "miracl" not in str(key) and "mldr" not in str(key):
-        continue 
+        continue
     directory = Path(f"/tmp/{bucket}/{key.name}")
     out_dir = Path(f"/tmp/{bucket}-filtered/{key.name}")
     out_dir.mkdir(exist_ok=True, parents=True)
@@ -21,7 +21,7 @@ for key in buckets:
         files = list(directory.glob("**/shard-*.jsonl.gz"))
     if len(files) == 0:
         print(f"No files found in {directory}")
-        
+
     for file in tqdm(files):
         with gzip.open(file, "rt") as f:
             if nested:
@@ -39,6 +39,8 @@ for key in buckets:
                         lt_neg += 1
                     else:
                         f_out.write(json.dumps(data) + "\n")
-                        
+
                     num_lines += 1
-        print(f"{file}: {num_lines} lines, {lt_neg} < 7, {lt_neg / num_lines * 100:.2f}%")
+        print(
+            f"{file}: {num_lines} lines, {lt_neg} < 7, {lt_neg / num_lines * 100:.2f}%"
+        )

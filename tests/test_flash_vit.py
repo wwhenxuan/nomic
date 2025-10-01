@@ -3,7 +3,11 @@ import torch
 from transformers import AutoConfig, AutoImageProcessor, AutoModel
 from transformers import ViTModel as HFViTModel
 
-from contrastors.models.vit import ViTModel, hf_vit_config_to_vit_config, inverse_remap_state_dict_hf_vit
+from contrastors.models.vit import (
+    ViTModel,
+    hf_vit_config_to_vit_config,
+    inverse_remap_state_dict_hf_vit,
+)
 
 
 @pytest.mark.parametrize(
@@ -21,11 +25,23 @@ def test_openclip_forward(model_name):
     config = AutoConfig.from_pretrained(model_name)
     config = hf_vit_config_to_vit_config(config)
 
-    flash_model = ViTModel.from_pretrained(model_name, config=config).to("cuda").to(torch.bfloat16)
+    flash_model = (
+        ViTModel.from_pretrained(model_name, config=config)
+        .to("cuda")
+        .to(torch.bfloat16)
+    )
     if "vit-mae" in model_name:
-        bf16_model = AutoModel.from_pretrained(model_name, mask_ratio=0).to("cuda").to(torch.bfloat16)
+        bf16_model = (
+            AutoModel.from_pretrained(model_name, mask_ratio=0)
+            .to("cuda")
+            .to(torch.bfloat16)
+        )
     else:
-        bf16_model = AutoModel.from_pretrained(model_name, add_pooling_layer=False).to("cuda").to(torch.bfloat16)
+        bf16_model = (
+            AutoModel.from_pretrained(model_name, add_pooling_layer=False)
+            .to("cuda")
+            .to(torch.bfloat16)
+        )
 
     assert sum(p.numel() for p in bf16_model.parameters() if p.requires_grad) == sum(
         p.numel() for p in flash_model.parameters() if p.requires_grad
@@ -45,9 +61,17 @@ def test_openclip_forward(model_name):
     del bf16_model
 
     if "vit-mae" in model_name:
-        model = AutoModel.from_pretrained(model_name, mask_ratio=0).to("cuda").to(torch.float32)
+        model = (
+            AutoModel.from_pretrained(model_name, mask_ratio=0)
+            .to("cuda")
+            .to(torch.float32)
+        )
     else:
-        model = AutoModel.from_pretrained(model_name, add_pooling_layer=False).to("cuda").to(torch.float32)
+        model = (
+            AutoModel.from_pretrained(model_name, add_pooling_layer=False)
+            .to("cuda")
+            .to(torch.float32)
+        )
 
     fp32_outputs = model(pixel_values=processed["pixel_values"].to(torch.float32))
 
@@ -56,13 +80,27 @@ def test_openclip_forward(model_name):
     # check is same as flash attention check, make sure flash error is less than 1.25 * |bf16 - fp32|
     print((flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().max().item())
     print((flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().mean().item())
-    print((bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state).abs().max().item())
-    print((bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state).abs().mean().item())
+    print(
+        (bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state)
+        .abs()
+        .max()
+        .item()
+    )
+    print(
+        (bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state)
+        .abs()
+        .mean()
+        .item()
+    )
 
-    assert (flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().max().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.last_hidden_state
+    ).abs().max().item() <= 3.0 * (
         bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state
     ).abs().max().item()
-    assert (flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().mean().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.last_hidden_state
+    ).abs().mean().item() <= 3.0 * (
         bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state
     ).abs().mean().item()
 
@@ -104,7 +142,11 @@ def test_clip_convert_to_hf(model_name):
     del model
     del hf_model
 
-    model = AutoModel.from_pretrained(model_name, add_pooling_layer=False).to("cuda").to(torch.float32)
+    model = (
+        AutoModel.from_pretrained(model_name, add_pooling_layer=False)
+        .to("cuda")
+        .to(torch.float32)
+    )
 
     fp32_outputs = model(pixel_values=processed["pixel_values"].to(torch.float32))
 
@@ -113,12 +155,26 @@ def test_clip_convert_to_hf(model_name):
     # check is same as flash attention check, make sure flash error is less than 1.25 * |bf16 - fp32|
     print((flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().max().item())
     print((flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().mean().item())
-    print((bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state).abs().max().item())
-    print((bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state).abs().mean().item())
+    print(
+        (bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state)
+        .abs()
+        .max()
+        .item()
+    )
+    print(
+        (bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state)
+        .abs()
+        .mean()
+        .item()
+    )
 
-    assert (flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().max().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.last_hidden_state
+    ).abs().max().item() <= 3.0 * (
         bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state
     ).abs().max().item()
-    assert (flash_pooler_outputs - fp32_outputs.last_hidden_state).abs().mean().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.last_hidden_state
+    ).abs().mean().item() <= 3.0 * (
         bf16_outputs.last_hidden_state - fp32_outputs.last_hidden_state
     ).abs().mean().item()

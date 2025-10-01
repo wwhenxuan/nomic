@@ -18,9 +18,12 @@ from torch.utils.data import DataLoader, IterableDataset
 import pyarrow as pa
 
 import faiss
-from contrastors.models.encoder import BertConfig, NomicBertModel, bert_config_to_nomic_config
+from contrastors.models.encoder import (
+    BertConfig,
+    NomicBertModel,
+    bert_config_to_nomic_config,
+)
 from contrastors.distributed import print_in_order
-
 
 
 def parse_args():
@@ -47,7 +50,7 @@ def send_dict_to_rank0(tensor_dict):
     keys = sorted(tensor_dict.keys())
     with open(f"keys_rank_{rank}.json", "w") as f:
         json.dump(keys, f)
-            
+
     tensors = [tensor_dict[k] for k in keys]
     queries = [tensor[0] for tensor in tensors]
     documents = [tensor[1] for tensor in tensors]
@@ -61,7 +64,9 @@ def send_dict_to_rank0(tensor_dict):
         gathered_documents = None
 
     # Gather tensors on rank 0
-    for i, (query, document) in enumerate(tqdm(zip(queries, documents), total=len(queries), disable=rank != 0)):
+    for i, (query, document) in enumerate(
+        tqdm(zip(queries, documents), total=len(queries), disable=rank != 0)
+    ):
         # On rank 0, prepare a list to store gathered tensors from all ranks for the current tensor
         if rank == 0:
             gathered_q = [torch.empty_like(query) for _ in range(world_size)]
@@ -100,11 +105,15 @@ def send_dict_to_rank0(tensor_dict):
         print(f"{len(flat_keys)=}")
         flat_queries = [item for sublist in zip(*gathered_queries) for item in sublist]
         print(f"{len(flat_queries)=}")
-        flat_documents = [item for sublist in zip(*gathered_documents) for item in sublist]
+        flat_documents = [
+            item for sublist in zip(*gathered_documents) for item in sublist
+        ]
         print(f"{len(flat_documents)=}")
 
         # Rebuild the dictionary
-        rebuilt_dict = {k: (q, d) for k, q, d in zip(flat_keys, flat_queries, flat_documents)}
+        rebuilt_dict = {
+            k: (q, d) for k, q, d in zip(flat_keys, flat_queries, flat_documents)
+        }
         print(f"{len(rebuilt_dict)=}")
         return rebuilt_dict
     else:
@@ -117,9 +126,15 @@ def print_rank0(*args, **kwargs):
 
 
 def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    token_embeddings = model_output[
+        0
+    ]  # First element of model_output contains all token embeddings
+    input_mask_expanded = (
+        attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    )
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        input_mask_expanded.sum(1), min=1e-9
+    )
 
 
 def load_dataset(path, query_key, document_key, file_start=0, max_files=100):
@@ -136,7 +151,11 @@ def load_dataset(path, query_key, document_key, file_start=0, max_files=100):
         with filehandler as f:
             for line in f:
                 data = json.loads(line)
-                record = {query_key: data[query_key], document_key: data[document_key], "id": i}
+                record = {
+                    query_key: data[query_key],
+                    document_key: data[document_key],
+                    "id": i,
+                }
 
                 dataset.append(record)
                 i += 1
@@ -149,20 +168,21 @@ def count_lines_in_file(file_info):
     num_lines = 0
     reader = pa.memory_map(str(file))
     file_reader = pa.ipc.open_stream(reader)
-    
+
     while True:
         try:
             batch = file_reader.read_next_batch()
             num_lines += batch.num_rows
         except StopIteration:
             break
-    
+
     return num_lines, start_pos
+
 
 def get_num_lines(dataset):
     if isinstance(dataset, str):
         dataset = Path(dataset)
-    
+
     # Get total size and setup progress bar
     total_bytes = 0
     if dataset.is_dir():
@@ -172,28 +192,27 @@ def get_num_lines(dataset):
         files = [dataset]
         total_bytes = os.path.getsize(dataset)
 
-    print_rank0(f"Total files: {len(files)=}") 
+    print_rank0(f"Total files: {len(files)=}")
     # Get current rank and world size
     rank = dist.get_rank()
     world_size = dist.get_world_size()
-    
+
     # Distribute files across ranks
     files_for_this_rank = [f for i, f in enumerate(files) if i % world_size == rank]
-    
-    progbar = tqdm(total=len(files_for_this_rank),
-                  disable=rank != 0)
-    
+
+    progbar = tqdm(total=len(files_for_this_rank), disable=rank != 0)
+
     # Prepare file information for workers for this rank's files
     file_infos = [(f, 0) for f in files_for_this_rank]
-    
+
     # Use process pool for true parallelism
     with concurrent.futures.ProcessPoolExecutor(max_workers=64) as executor:
         # Submit this rank's files for processing
         future_to_file = {
-            executor.submit(count_lines_in_file, file_info): file_info 
+            executor.submit(count_lines_in_file, file_info): file_info
             for file_info in file_infos
         }
-        
+
         total_lines = 0
         # Collect results as they complete
         for future in concurrent.futures.as_completed(future_to_file):
@@ -202,12 +221,12 @@ def get_num_lines(dataset):
                 total_lines += num_lines
                 progbar.update(1)
             except Exception as e:
-                print(f'Rank {rank}: Generated an exception: {e}')
-    
+                print(f"Rank {rank}: Generated an exception: {e}")
+
     # Gather results from all ranks
     all_lines = torch.tensor([total_lines], device=f"cuda:{rank}")
     dist.all_reduce(all_lines, op=dist.ReduceOp.SUM)
-    
+
     progbar.close()
     return all_lines.item()
 
@@ -226,23 +245,39 @@ def dict_collator(records, tokenizer, query_key, document_key, per_device_batch_
         batch["id"].append(record["id"])
 
         if len(batch["query"]) == per_device_batch_size:
-            tokenized_query = tokenizer(batch["query"], padding=True, truncation=True, return_tensors="pt")
-            tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
-            yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
+            tokenized_query = tokenizer(
+                batch["query"], padding=True, truncation=True, return_tensors="pt"
+            )
+            tokenized_document = tokenizer(
+                batch["document"], padding=True, truncation=True, return_tensors="pt"
+            )
+            yield {
+                "query": tokenized_query,
+                "document": tokenized_document,
+                "id": batch["id"],
+            }
             batch = {"query": [], "document": [], "id": []}
 
     # if we have a partial batch, yield it
     if len(batch["query"]) > 0:
-        tokenized_query = tokenizer(batch["query"], padding=True, truncation=True, return_tensors="pt")
-        tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
-        yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
+        tokenized_query = tokenizer(
+            batch["query"], padding=True, truncation=True, return_tensors="pt"
+        )
+        tokenized_document = tokenizer(
+            batch["document"], padding=True, truncation=True, return_tensors="pt"
+        )
+        yield {
+            "query": tokenized_query,
+            "document": tokenized_document,
+            "id": batch["id"],
+        }
 
-        
+
 class ContiguousArrowReader:
     def __init__(self, file_path: str | Path, global_batch_size: int = 32) -> None:
         """
         Initialize the infinite reader for a memory mapped Arrow IPC stream file.
-        
+
         Args:
             file_path: Path to the Arrow IPC stream file
         """
@@ -258,7 +293,7 @@ class ContiguousArrowReader:
             self.reader.close()
         if self.source is not None:
             self.source.close()
-        
+
         # Create new memory mapped file and reader
         self.source = pa.memory_map(str(self.file_path))
         self.reader = pa.ipc.open_stream(self.source)
@@ -266,10 +301,10 @@ class ContiguousArrowReader:
     def read_next_batch(self) -> pa.RecordBatch:
         """
         Read the next batch, recreating the reader when reaching the end.
-        
+
         Returns:
             pyarrow.RecordBatch: The next batch of data
-        
+
         Raises:
             FileNotFoundError: If the source file doesn't exist
             pa.ArrowInvalid: If the file is not a valid Arrow IPC stream
@@ -285,6 +320,7 @@ class ContiguousArrowReader:
         if self.source is not None:
             self.source.close()
 
+
 class BatchedArrowFileReader:
     def __init__(self, path: Path, global_batch_size: int = 32) -> None:
         self.path = path
@@ -293,20 +329,17 @@ class BatchedArrowFileReader:
         self.stream = ContiguousArrowReader(path)
         self.row_overflow = None
 
-        
     @property
     def schema(self):
         return self.stream.reader.schema
 
-    
     def __iter__(self):
         while True:
             batch = self.read_lines(self.global_batch_size)
             if batch is None:
                 break
             yield batch
-    
-        
+
     def read_lines(self, num_lines: int):
         try:
             batch = None
@@ -321,23 +354,27 @@ class BatchedArrowFileReader:
                 batch = pa.concat_tables([batch, next_batch])
 
             if len(batch) > num_lines:
-                overflow = batch.slice(offset=num_lines) 
+                overflow = batch.slice(offset=num_lines)
                 batch = batch.slice(offset=0, length=num_lines)
                 self.row_overflow = overflow
 
             return batch
         except StopIteration:
             if self.row_overflow is not None:
-                print(f"Reading overflow of {len(self.row_overflow)} lines from {self.path}")
+                print(
+                    f"Reading overflow of {len(self.row_overflow)} lines from {self.path}"
+                )
                 batch = self.row_overflow
                 self.row_overflow = None
                 return batch
 
             if batch is not None and len(batch) > num_lines:
-                overflow = batch.slice(offset=num_lines) 
+                overflow = batch.slice(offset=num_lines)
                 batch = batch.slice(offset=0, length=num_lines)
                 self.row_overflow = overflow
-            print(f"StopIteration, {dist.get_rank()=}, {len(batch) if batch is not None else 'None'}, {self.row_overflow=}")
+            print(
+                f"StopIteration, {dist.get_rank()=}, {len(batch) if batch is not None else 'None'}, {self.row_overflow=}"
+            )
             return batch
 
     def close(self) -> None:
@@ -346,6 +383,8 @@ class BatchedArrowFileReader:
 
 
 tokenizer = AutoTokenizer.from_pretrained("intfloat/multilingual-e5-small")
+
+
 def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_size):
     world_size = dist.get_world_size()
     rank = dist.get_rank()
@@ -356,63 +395,75 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
     else:
         path = [dataset]
 
-    
     id_start = 0
     global_batch_size = per_device_batch_size * world_size
     collator = DataCollatorWithPadding(tokenizer)
     global_batch_size = per_device_batch_size * world_size
     collator = DataCollatorWithPadding(tokenizer)
-    
+
     current_file_idx = 0
     current_reader = None
     accumulated_batch = None
-    
+
     while current_file_idx < len(path):
         # Initialize or update reader if needed
         if current_reader is None:
-            current_reader = BatchedArrowFileReader(path[current_file_idx], global_batch_size)
-        
+            current_reader = BatchedArrowFileReader(
+                path[current_file_idx], global_batch_size
+            )
+
         rows_to_read = global_batch_size
         if accumulated_batch is not None:
             rows_to_read -= len(accumulated_batch)
-            
+
         batch = current_reader.read_lines(rows_to_read)
 
         if accumulated_batch is not None:
-            print_in_order(f"{dist.get_rank()=}: Accumulating {len(accumulated_batch)} rows with {path[current_file_idx]}")
+            print_in_order(
+                f"{dist.get_rank()=}: Accumulating {len(accumulated_batch)} rows with {path[current_file_idx]}"
+            )
             batch = pa.concat_tables([accumulated_batch, batch])
             if len(batch) > global_batch_size:
-                print_in_order(f"{dist.get_rank()=} Accumulated more, saving {len(batch) - len(accumulated_batch)} rows")
+                print_in_order(
+                    f"{dist.get_rank()=} Accumulated more, saving {len(batch) - len(accumulated_batch)} rows"
+                )
                 batch = batch.slice(offset=0, length=global_batch_size)
                 accumulated_batch = batch.slice(offset=global_batch_size)
             else:
                 accumulated_batch = None
 
-        
         # If we got a partial batch and there are more files
-        if batch is not None and len(batch) < global_batch_size and current_file_idx < len(path) - 1:
+        if (
+            batch is not None
+            and len(batch) < global_batch_size
+            and current_file_idx < len(path) - 1
+        ):
             if accumulated_batch is None:
                 accumulated_batch = batch
             else:
                 accumulated_batch = pa.concat_tables([accumulated_batch, batch])
-            
+
             # If we have enough rows, yield them
             if len(accumulated_batch) > global_batch_size:
                 batch = accumulated_batch.slice(offset=0, length=global_batch_size)
                 accumulated_batch = accumulated_batch.slice(offset=global_batch_size)
             else:
                 # Move to next file and continue accumulating
-                print_in_order(f"{dist.get_rank()=}: Finished file {path[current_file_idx]}, moving to {path[current_file_idx + 1]}. Accumulated {len(accumulated_batch)} rows")
+                print_in_order(
+                    f"{dist.get_rank()=}: Finished file {path[current_file_idx]}, moving to {path[current_file_idx + 1]}. Accumulated {len(accumulated_batch)} rows"
+                )
                 current_file_idx += 1
                 current_reader = None
                 continue
-        
+
         # If we have a full batch or reached the end
         if batch is not None:
             # Calculate slice for this GPU
             if len(batch) % world_size != 0:
                 min_rows = (len(batch) // world_size) * world_size
-                print_in_order(f"{dist.get_rank()=}: Warning: {len(batch)} rows not divisible by {world_size}, using {min_rows} rows")
+                print_in_order(
+                    f"{dist.get_rank()=}: Warning: {len(batch)} rows not divisible by {world_size}, using {min_rows} rows"
+                )
                 if accumulated_batch is not None:
                     accumulated_batch = pa.concat_tables([accumulated_batch, batch])
                 else:
@@ -429,13 +480,17 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
             data = {
                 "query": {
                     "input_ids": gpu_chunk.column("query_input_ids").to_pylist(),
-                    "attention_mask": gpu_chunk.column("query_attention_mask").to_pylist()
+                    "attention_mask": gpu_chunk.column(
+                        "query_attention_mask"
+                    ).to_pylist(),
                 },
                 "document": {
                     "input_ids": gpu_chunk.column("document_input_ids").to_pylist(),
-                    "attention_mask": gpu_chunk.column("document_attention_mask").to_pylist()
+                    "attention_mask": gpu_chunk.column(
+                        "document_attention_mask"
+                    ).to_pylist(),
                 },
-                "id": gpu_chunk.column("id").to_pylist()
+                "id": gpu_chunk.column("id").to_pylist(),
             }
             print_in_order(f"{dist.get_rank()=}: {len(gpu_chunk)=}, {data['id'][:10]=}")
 
@@ -456,6 +511,7 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
     #     tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
     #     yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
 
+
 class JSONLDataset(IterableDataset):
     def __init__(self, path, tokenizer, query_key, document_key, per_device_batch_size):
         self.path = path
@@ -463,40 +519,34 @@ class JSONLDataset(IterableDataset):
         self.query_key = query_key
         self.document_key = document_key
         self.per_device_batch_size = per_device_batch_size
-    
+
     def __iter__(self):
         return jsonl_collator(
-            self.path, 
+            self.path,
             self.tokenizer,
             self.query_key,
             self.document_key,
             per_device_batch_size=self.per_device_batch_size,
         )
 
-        
+
 def collate_fn(batches):
     """
     Collate function to combine batches from multiple workers
     """
-    
+
     # Tokenize the combined batch
     tokenized_query = tokenizer(
-        batches["query"], 
-        padding=True, 
-        truncation=True, 
-        return_tensors="pt"
+        batches["query"], padding=True, truncation=True, return_tensors="pt"
     )
     tokenized_document = tokenizer(
-        batches["document"], 
-        padding=True, 
-        truncation=True, 
-        return_tensors="pt"
+        batches["document"], padding=True, truncation=True, return_tensors="pt"
     )
-    
+
     return {
         "query": tokenized_query,
         "document": tokenized_document,
-        "id": batches["id"]
+        "id": batches["id"],
     }
 
 
@@ -507,26 +557,37 @@ def embed(model, dataloader, batch_size, max_samples):
     with torch.no_grad():
         for batch in dataloader:
             ids = batch.pop("id")
-            query_inputs = {k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["query"].items()}
+            query_inputs = {
+                k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["query"].items()
+            }
             query = model(**query_inputs)
 
             query = mean_pooling(query, query_inputs["attention_mask"])
             normalized_query = F.normalize(query, p=2, dim=1)
 
-            answer_inputs = {k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["document"].items()}
+            answer_inputs = {
+                k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["document"].items()
+            }
             answer = model(**answer_inputs)
 
             answer = mean_pooling(answer, answer_inputs["attention_mask"])
             normlized_answer = F.normalize(answer, p=2, dim=1)
 
             id2embedding.update(
-                {id: (query.cpu(), answer.cpu()) for id, query, answer in zip(ids, normalized_query, normlized_answer)}
+                {
+                    id: (query.cpu(), answer.cpu())
+                    for id, query, answer in zip(
+                        ids, normalized_query, normlized_answer
+                    )
+                }
             )
 
             progbar.update(1)
             examples_seen += batch_size
             if examples_seen >= max_samples:
-                print(f"{dist.get_rank()=} {examples_seen=}, {max_samples=}, breaking!!!!")
+                print(
+                    f"{dist.get_rank()=} {examples_seen=}, {max_samples=}, breaking!!!!"
+                )
                 break
 
     return id2embedding
@@ -554,7 +615,11 @@ def filter_points(id2embeddings, batch_size=256):
         query_embs = [id2_query_emb[atlas_id] for atlas_id in atlas_ids]
         _, top_k_indices = index.search(np.array(query_embs).astype(np.float32), 2)
         valid_pairs = (
-            np.equal(top_k_indices, np.arange(i, min(i + batch_size, len(range2id)))[:, None]).sum(axis=1).tolist()
+            np.equal(
+                top_k_indices, np.arange(i, min(i + batch_size, len(range2id)))[:, None]
+            )
+            .sum(axis=1)
+            .tolist()
         )
         for j, is_valid in enumerate(valid_pairs):
             if is_valid:
@@ -576,7 +641,9 @@ if __name__ == "__main__":
     dataset = Path(args.dataset)
     print_rank0(f"dataset: {dataset}, {dataset.is_dir()=}")
     if False:
-        records = load_dataset(dataset, args.query_key, args.document_key, args.file_start, args.max_files)
+        records = load_dataset(
+            dataset, args.query_key, args.document_key, args.file_start, args.max_files
+        )
         num_lines = len(records)
     else:
         num_lines = get_num_lines(dataset)
@@ -584,13 +651,21 @@ if __name__ == "__main__":
     print_in_order(f"{dist.get_rank()=}, num lines: {num_lines}")
 
     num_examples_per_rank = math.ceil(num_lines / dist.get_world_size())
-    print_in_order(f"{dist.get_rank()=}, num examples per rank: {num_examples_per_rank}")
-    per_device_max_samples = min(args.index_size // dist.get_world_size(), num_examples_per_rank)
-    print_in_order(f"{dist.get_rank()=}, Total examples per device: {per_device_max_samples}")
+    print_in_order(
+        f"{dist.get_rank()=}, num examples per rank: {num_examples_per_rank}"
+    )
+    per_device_max_samples = min(
+        args.index_size // dist.get_world_size(), num_examples_per_rank
+    )
+    print_in_order(
+        f"{dist.get_rank()=}, Total examples per device: {per_device_max_samples}"
+    )
 
     index_size = args.index_size
     if index_size % (args.batch_size * dist.get_world_size()) != 0:
-        index_size = ((index_size // (args.batch_size * dist.get_world_size())) + 1) * (args.batch_size * dist.get_world_size())
+        index_size = ((index_size // (args.batch_size * dist.get_world_size())) + 1) * (
+            args.batch_size * dist.get_world_size()
+        )
 
     num_iterations = num_lines // index_size
     print_in_order(f"{dist.get_rank()=}, num iterations: {num_iterations}")
@@ -598,12 +673,16 @@ if __name__ == "__main__":
     num_batches_per_device = per_device_max_samples // args.batch_size
     if per_device_max_samples % args.batch_size != 0:
         num_batches_per_device += 1
-    print_in_order(f"{dist.get_rank()=}, Num batchers per device: {num_batches_per_device}")
+    print_in_order(
+        f"{dist.get_rank()=}, Num batchers per device: {num_batches_per_device}"
+    )
     model_name = "intfloat/multilingual-e5-small"
     hf_config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     config = bert_config_to_nomic_config(hf_config)
     model = (
-        NomicBertModel.from_pretrained(model_name, config=config, add_pooling_layer=False)
+        NomicBertModel.from_pretrained(
+            model_name, config=config, add_pooling_layer=False
+        )
         .to(f"cuda:{dist.get_rank()}")
         .to(dtype=torch.float16)
     )
@@ -614,10 +693,13 @@ if __name__ == "__main__":
 
     # initialize once in case we have more than one iteration
     if False:
-        dataloader = dict_collator(records, tokenizer, args.query_key, args.document_key, args.batch_size)
+        dataloader = dict_collator(
+            records, tokenizer, args.query_key, args.document_key, args.batch_size
+        )
     else:
-        dataloader = jsonl_collator(dataset, tokenizer, args.query_key, args.document_key, args.batch_size)
-
+        dataloader = jsonl_collator(
+            dataset, tokenizer, args.query_key, args.document_key, args.batch_size
+        )
 
     total_samples = 0
     total_kept = 0
@@ -627,22 +709,34 @@ if __name__ == "__main__":
         # if we're on the last iteration and it's not divisible by batch_size * world_size, round down
         if i == num_iterations - 1:
             if num_iterations > 1:
-                total_seen = i * num_batches_per_device * args.batch_size * dist.get_world_size()
+                total_seen = (
+                    i * num_batches_per_device * args.batch_size * dist.get_world_size()
+                )
                 remaining = num_lines - total_seen
-                per_device_max_samples = remaining - (remaining % (args.batch_size * dist.get_world_size()))
-                per_device_max_samples = (per_device_max_samples // dist.get_world_size()) - 1
+                per_device_max_samples = remaining - (
+                    remaining % (args.batch_size * dist.get_world_size())
+                )
+                per_device_max_samples = (
+                    per_device_max_samples // dist.get_world_size()
+                ) - 1
 
-        print_in_order(f"rank {dist.get_rank()} embedding {per_device_max_samples} samples")
+        print_in_order(
+            f"rank {dist.get_rank()} embedding {per_device_max_samples} samples"
+        )
         embeddings = embed(model, dataloader, args.batch_size, per_device_max_samples)
         print_in_order(f"{type(embeddings)=}")
-        print_in_order(f"rank {dist.get_rank()} finished embedding {len(embeddings)} samples")
+        print_in_order(
+            f"rank {dist.get_rank()} finished embedding {len(embeddings)} samples"
+        )
 
         dist.barrier()
         all_embeddings = send_dict_to_rank0(embeddings)
 
         if dist.get_rank() == 0:
             torch.cuda.empty_cache()
-            all_embeddings = {k: (q.numpy(), d.numpy()) for k, (q, d) in all_embeddings.items()}
+            all_embeddings = {
+                k: (q.numpy(), d.numpy()) for k, (q, d) in all_embeddings.items()
+            }
             ids_to_keep = filter_points(all_embeddings)
             print(f"keeping {len(ids_to_keep)} out of {len(all_embeddings)}")
             total_samples += len(all_embeddings)

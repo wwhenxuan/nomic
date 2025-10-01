@@ -19,7 +19,7 @@ tokenizers = [
     "gpt-4",
     "gpt-4o",
     "meta-llama/Llama-3.2-1B",
-    "Qwen/Qwen2-0.5B-Instruct"
+    "Qwen/Qwen2-0.5B-Instruct",
 ]
 
 tokens_per_lang = {}
@@ -95,8 +95,8 @@ fig.add_shape(
         width=2,
         dash="dash",
     ),
-    xref='paper',
-    yref='y'
+    xref="paper",
+    yref="y",
 )
 
 fig.update_layout(
@@ -116,7 +116,7 @@ fig.update_layout(
     xaxis_title_font_size=18,
     yaxis_title_font_size=18,
     legend_title_font_size=18,
-    font_size=14  # This sets the base font size for tick labels and legend text
+    font_size=14,  # This sets the base font size for tick labels and legend text
 )
 
 # Add annotation for the reference line
@@ -130,9 +130,10 @@ fig.add_annotation(
     font=dict(size=12, color="red"),
     textangle=-90,
     xanchor="left",
-    yanchor="middle"
+    yanchor="middle",
 )
 
 # Increase the resolution
-fig.write_image(f"tokenizer_compare_{num_samples=}.webp", scale=4, format="webp", engine="kaleido")
-
+fig.write_image(
+    f"tokenizer_compare_{num_samples=}.webp", scale=4, format="webp", engine="kaleido"
+)

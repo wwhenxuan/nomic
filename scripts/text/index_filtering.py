@@ -16,7 +16,11 @@ import concurrent.futures
 from torch.utils.data import DataLoader, IterableDataset
 
 import faiss
-from contrastors.models.encoder import BertConfig, NomicBertModel, bert_config_to_nomic_config
+from contrastors.models.encoder import (
+    BertConfig,
+    NomicBertModel,
+    bert_config_to_nomic_config,
+)
 
 
 def parse_args():
@@ -43,7 +47,7 @@ def send_dict_to_rank0(tensor_dict):
     keys = sorted(tensor_dict.keys())
     with open(f"keys_rank_{rank}.json", "w") as f:
         json.dump(keys, f)
-            
+
     tensors = [tensor_dict[k] for k in keys]
     queries = [tensor[0] for tensor in tensors]
     documents = [tensor[1] for tensor in tensors]
@@ -57,7 +61,9 @@ def send_dict_to_rank0(tensor_dict):
         gathered_documents = None
 
     # Gather tensors on rank 0
-    for i, (query, document) in enumerate(tqdm(zip(queries, documents), total=len(queries), disable=rank != 0)):
+    for i, (query, document) in enumerate(
+        tqdm(zip(queries, documents), total=len(queries), disable=rank != 0)
+    ):
         # On rank 0, prepare a list to store gathered tensors from all ranks for the current tensor
         if rank == 0:
             gathered_q = [torch.empty_like(query) for _ in range(world_size)]
@@ -96,11 +102,15 @@ def send_dict_to_rank0(tensor_dict):
         print(f"{len(flat_keys)=}")
         flat_queries = [item for sublist in zip(*gathered_queries) for item in sublist]
         print(f"{len(flat_queries)=}")
-        flat_documents = [item for sublist in zip(*gathered_documents) for item in sublist]
+        flat_documents = [
+            item for sublist in zip(*gathered_documents) for item in sublist
+        ]
         print(f"{len(flat_documents)=}")
 
         # Rebuild the dictionary
-        rebuilt_dict = {k: (q, d) for k, q, d in zip(flat_keys, flat_queries, flat_documents)}
+        rebuilt_dict = {
+            k: (q, d) for k, q, d in zip(flat_keys, flat_queries, flat_documents)
+        }
         print(f"{len(rebuilt_dict)=}")
         return rebuilt_dict
     else:
@@ -113,9 +123,15 @@ def print_rank0(*args, **kwargs):
 
 
 def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    token_embeddings = model_output[
+        0
+    ]  # First element of model_output contains all token embeddings
+    input_mask_expanded = (
+        attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    )
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        input_mask_expanded.sum(1), min=1e-9
+    )
 
 
 def load_dataset(path, query_key, document_key, file_start=0, max_files=100):
@@ -132,7 +148,11 @@ def load_dataset(path, query_key, document_key, file_start=0, max_files=100):
         with filehandler as f:
             for line in f:
                 data = json.loads(line)
-                record = {query_key: data[query_key], document_key: data[document_key], "id": i}
+                record = {
+                    query_key: data[query_key],
+                    document_key: data[document_key],
+                    "id": i,
+                }
 
                 dataset.append(record)
                 i += 1
@@ -143,19 +163,22 @@ def load_dataset(path, query_key, document_key, file_start=0, max_files=100):
 def count_lines_in_file(file_info):
     file, start_pos = file_info
     num_lines = 0
-    filehandler = gzip.open(file, "rt") if str(file).endswith(".gz") else open(file, "r")
-    
+    filehandler = (
+        gzip.open(file, "rt") if str(file).endswith(".gz") else open(file, "r")
+    )
+
     with filehandler as f:
         for _ in f:
             num_lines += 1
         current_pos = f.buffer.fileobj.tell()
-    
+
     return num_lines, current_pos - start_pos
+
 
 def get_num_lines(dataset):
     if isinstance(dataset, str):
         dataset = Path(dataset)
-    
+
     # Get total size and setup progress bar
     total_bytes = 0
     if dataset.is_dir():
@@ -164,28 +187,29 @@ def get_num_lines(dataset):
     else:
         files = [dataset]
         total_bytes = os.path.getsize(dataset)
-    
+
     # Get current rank and world size
     rank = dist.get_rank()
     world_size = dist.get_world_size()
-    
+
     # Distribute files across ranks
     files_for_this_rank = [f for i, f in enumerate(files) if i % world_size == rank]
-    
-    progbar = tqdm(total=total_bytes // world_size, unit="B", unit_scale=True, 
-                  disable=rank != 0)
-    
+
+    progbar = tqdm(
+        total=total_bytes // world_size, unit="B", unit_scale=True, disable=rank != 0
+    )
+
     # Prepare file information for workers for this rank's files
     file_infos = [(f, 0) for f in files_for_this_rank]
-    
+
     # Use process pool for true parallelism
     with concurrent.futures.ProcessPoolExecutor() as executor:
         # Submit this rank's files for processing
         future_to_file = {
-            executor.submit(count_lines_in_file, file_info): file_info 
+            executor.submit(count_lines_in_file, file_info): file_info
             for file_info in file_infos
         }
-        
+
         total_lines = 0
         # Collect results as they complete
         for future in concurrent.futures.as_completed(future_to_file):
@@ -194,12 +218,12 @@ def get_num_lines(dataset):
                 total_lines += num_lines
                 progbar.update(bytes_processed)
             except Exception as e:
-                print(f'Rank {rank}: Generated an exception: {e}')
-    
+                print(f"Rank {rank}: Generated an exception: {e}")
+
     # Gather results from all ranks
     all_lines = torch.tensor([total_lines], device=f"cuda:{rank}")
     dist.all_reduce(all_lines, op=dist.ReduceOp.SUM)
-    
+
     progbar.close()
     return all_lines.item()
 
@@ -218,16 +242,32 @@ def dict_collator(records, tokenizer, query_key, document_key, per_device_batch_
         batch["id"].append(record["id"])
 
         if len(batch["query"]) == per_device_batch_size:
-            tokenized_query = tokenizer(batch["query"], padding=True, truncation=True, return_tensors="pt")
-            tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
-            yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
+            tokenized_query = tokenizer(
+                batch["query"], padding=True, truncation=True, return_tensors="pt"
+            )
+            tokenized_document = tokenizer(
+                batch["document"], padding=True, truncation=True, return_tensors="pt"
+            )
+            yield {
+                "query": tokenized_query,
+                "document": tokenized_document,
+                "id": batch["id"],
+            }
             batch = {"query": [], "document": [], "id": []}
 
     # if we have a partial batch, yield it
     if len(batch["query"]) > 0:
-        tokenized_query = tokenizer(batch["query"], padding=True, truncation=True, return_tensors="pt")
-        tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
-        yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
+        tokenized_query = tokenizer(
+            batch["query"], padding=True, truncation=True, return_tensors="pt"
+        )
+        tokenized_document = tokenizer(
+            batch["document"], padding=True, truncation=True, return_tensors="pt"
+        )
+        yield {
+            "query": tokenized_query,
+            "document": tokenized_document,
+            "id": batch["id"],
+        }
 
 
 def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_size):
@@ -245,15 +285,18 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
     worker_id = worker_info.id if worker_info else 0
     total_parallel = num_workers * world_size
     global_worker_rank = (rank * num_workers) + worker_id
-    print(f"rank: {rank}, worker_id: {worker_id}, global_worker_rank: {global_worker_rank}, total_parallel: {total_parallel}")
-    
-    
+    print(
+        f"rank: {rank}, worker_id: {worker_id}, global_worker_rank: {global_worker_rank}, total_parallel: {total_parallel}"
+    )
+
     total_rows = 0  # Keep track of total rows seen by this worker
     total_yielded = 0  # Keep track of rows actually yielded
-    
+
     ids = 0
     for file in path:
-        filehandler = gzip.open(file, "rt") if str(file).endswith(".gz") else open(file, "r")
+        filehandler = (
+            gzip.open(file, "rt") if str(file).endswith(".gz") else open(file, "r")
+        )
         with filehandler as f:
             for line in f:
                 # get row for current rank + worker
@@ -267,7 +310,9 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
                     else:
                         batch["query"].append(f"query: {data[query_key]}")
                         if isinstance(data[document_key], list):
-                            batch["document"].append(f"passage: {data[document_key][0]}")
+                            batch["document"].append(
+                                f"passage: {data[document_key][0]}"
+                            )
                         else:
                             batch["document"].append(f"passage: {data[document_key]}")
                         batch["id"].append(ids)
@@ -284,6 +329,7 @@ def jsonl_collator(path, tokenizer, query_key, document_key, per_device_batch_si
     #     tokenized_document = tokenizer(batch["document"], padding=True, truncation=True, return_tensors="pt")
     #     yield {"query": tokenized_query, "document": tokenized_document, "id": batch["id"]}
 
+
 class JSONLDataset(IterableDataset):
     def __init__(self, path, tokenizer, query_key, document_key, per_device_batch_size):
         self.path = path
@@ -291,41 +337,35 @@ class JSONLDataset(IterableDataset):
         self.query_key = query_key
         self.document_key = document_key
         self.per_device_batch_size = per_device_batch_size
-    
+
     def __iter__(self):
         return jsonl_collator(
-            self.path, 
+            self.path,
             self.tokenizer,
             self.query_key,
             self.document_key,
             per_device_batch_size=self.per_device_batch_size,
         )
 
-        
+
 def collate_fn(batches):
     """
     Collate function to combine batches from multiple workers
     """
-    
+
     # Tokenize the combined batch
     tokenizer = AutoTokenizer.from_pretrained("intfloat/multilingual-e5-small")
     tokenized_query = tokenizer(
-        batches["query"], 
-        padding=True, 
-        truncation=True, 
-        return_tensors="pt"
+        batches["query"], padding=True, truncation=True, return_tensors="pt"
     )
     tokenized_document = tokenizer(
-        batches["document"], 
-        padding=True, 
-        truncation=True, 
-        return_tensors="pt"
+        batches["document"], padding=True, truncation=True, return_tensors="pt"
     )
-    
+
     return {
         "query": tokenized_query,
         "document": tokenized_document,
-        "id": batches["id"]
+        "id": batches["id"],
     }
 
 
@@ -336,20 +376,29 @@ def embed(model, dataloader, batch_size, max_samples):
     with torch.no_grad():
         for batch in dataloader:
             ids = batch.pop("id")
-            query_inputs = {k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["query"].items()}
+            query_inputs = {
+                k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["query"].items()
+            }
             query = model(**query_inputs)
 
             query = mean_pooling(query, query_inputs["attention_mask"])
             normalized_query = F.normalize(query, p=2, dim=1)
 
-            answer_inputs = {k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["document"].items()}
+            answer_inputs = {
+                k: v.to(f"cuda:{dist.get_rank()}") for k, v in batch["document"].items()
+            }
             answer = model(**answer_inputs)
 
             answer = mean_pooling(answer, answer_inputs["attention_mask"])
             normlized_answer = F.normalize(answer, p=2, dim=1)
 
             id2embedding.update(
-                {id: (query.cpu(), answer.cpu()) for id, query, answer in zip(ids, normalized_query, normlized_answer)}
+                {
+                    id: (query.cpu(), answer.cpu())
+                    for id, query, answer in zip(
+                        ids, normalized_query, normlized_answer
+                    )
+                }
             )
 
             progbar.update(1)
@@ -382,7 +431,11 @@ def filter_points(id2embeddings, batch_size=256):
         query_embs = [id2_query_emb[atlas_id] for atlas_id in atlas_ids]
         _, top_k_indices = index.search(np.array(query_embs).astype(np.float32), 2)
         valid_pairs = (
-            np.equal(top_k_indices, np.arange(i, min(i + batch_size, len(range2id)))[:, None]).sum(axis=1).tolist()
+            np.equal(
+                top_k_indices, np.arange(i, min(i + batch_size, len(range2id)))[:, None]
+            )
+            .sum(axis=1)
+            .tolist()
         )
         for j, is_valid in enumerate(valid_pairs):
             if is_valid:
@@ -404,7 +457,9 @@ if __name__ == "__main__":
     dataset = Path(args.dataset)
     print_rank0(f"dataset: {dataset}, {dataset.is_dir()=}")
     if False:
-        records = load_dataset(dataset, args.query_key, args.document_key, args.file_start, args.max_files)
+        records = load_dataset(
+            dataset, args.query_key, args.document_key, args.file_start, args.max_files
+        )
         num_lines = len(records)
     else:
         num_lines = get_num_lines(dataset)
@@ -416,7 +471,9 @@ if __name__ == "__main__":
     num_iterations = num_lines // args.index_size
     print_rank0(f"num iterations: {num_iterations}")
 
-    per_device_max_samples = min(args.index_size // dist.get_world_size(), num_examples_per_rank)
+    per_device_max_samples = min(
+        args.index_size // dist.get_world_size(), num_examples_per_rank
+    )
     print_rank0(f"Total examples per device: {per_device_max_samples}")
     num_batches_per_device = per_device_max_samples // args.batch_size
     if per_device_max_samples % args.batch_size != 0:
@@ -427,7 +484,9 @@ if __name__ == "__main__":
     hf_config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
     config = bert_config_to_nomic_config(hf_config)
     model = (
-        NomicBertModel.from_pretrained(model_name, config=config, add_pooling_layer=False)
+        NomicBertModel.from_pretrained(
+            model_name, config=config, add_pooling_layer=False
+        )
         .to(f"cuda:{dist.get_rank()}")
         .to(dtype=torch.float16)
     )
@@ -438,13 +497,21 @@ if __name__ == "__main__":
 
     # initialize once in case we have more than one iteration
     if False:
-        dataloader = dict_collator(records, tokenizer, args.query_key, args.document_key, args.batch_size)
+        dataloader = dict_collator(
+            records, tokenizer, args.query_key, args.document_key, args.batch_size
+        )
     else:
         dataloader = JSONLDataset(
-            dataset, tokenizer, args.query_key, args.document_key, args.batch_size)
+            dataset, tokenizer, args.query_key, args.document_key, args.batch_size
+        )
 
-        dataloader = DataLoader(dataloader, batch_size=None, num_workers=8, collate_fn=collate_fn, prefetch_factor=4)
-
+        dataloader = DataLoader(
+            dataloader,
+            batch_size=None,
+            num_workers=8,
+            collate_fn=collate_fn,
+            prefetch_factor=4,
+        )
 
     total_samples = 0
     total_kept = 0
@@ -453,10 +520,16 @@ if __name__ == "__main__":
     for i in tqdm(range(num_iterations), disable=dist.get_rank() != 0):
         # if we're on the last iteration and it's not divisible by batch_size * world_size, round down
         if i == num_iterations - 1:
-            total_seen = i * num_batches_per_device * args.batch_size * dist.get_world_size()
+            total_seen = (
+                i * num_batches_per_device * args.batch_size * dist.get_world_size()
+            )
             remaining = num_lines - total_seen
-            per_device_max_samples = remaining - (remaining % (args.batch_size * dist.get_world_size()))
-            per_device_max_samples = (per_device_max_samples // dist.get_world_size()) - 1
+            per_device_max_samples = remaining - (
+                remaining % (args.batch_size * dist.get_world_size())
+            )
+            per_device_max_samples = (
+                per_device_max_samples // dist.get_world_size()
+            ) - 1
 
         print(f"rank {dist.get_rank()} embedding {per_device_max_samples} samples")
         embeddings = embed(model, dataloader, args.batch_size, per_device_max_samples)
@@ -468,7 +541,9 @@ if __name__ == "__main__":
 
         if dist.get_rank() == 0:
             torch.cuda.empty_cache()
-            all_embeddings = {k: (q.numpy(), d.numpy()) for k, (q, d) in all_embeddings.items()}
+            all_embeddings = {
+                k: (q.numpy(), d.numpy()) for k, (q, d) in all_embeddings.items()
+            }
             ids_to_keep = filter_points(all_embeddings)
             print(f"keeping {len(ids_to_keep)} out of {len(all_embeddings)}")
             total_samples += len(all_embeddings)

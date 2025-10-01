@@ -12,6 +12,8 @@ def test_clip_loss():
 
     sim = torch.exp(query.matmul(document.T))
     softmax = sim / sim.sum(dim=1, keepdim=True)
-    naive_loss = -torch.log(softmax[torch.arange(query.shape[0]), torch.arange(query.shape[0])]).mean()
+    naive_loss = -torch.log(
+        softmax[torch.arange(query.shape[0]), torch.arange(query.shape[0])]
+    ).mean()
 
     assert torch.allclose(loss, naive_loss)

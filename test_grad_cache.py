@@ -22,9 +22,9 @@ class ModelWrapper(nn.Module):
 
     def __call__(self, input_ids, attention_mask=None, token_type_ids=None):
         return {
-            "embedding": self.model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[
-                "pooler_output"
-            ]
+            "embedding": self.model(
+                input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+            )["pooler_output"]
         }
 
 
@@ -40,36 +40,50 @@ class LogitScaleConfig:
 
 
 if __name__ == "__main__":
-    dist.init_process_group(backend='nccl')
+    dist.init_process_group(backend="nccl")
     rank = dist.get_rank()
     torch.cuda.set_device(rank)
     print_rank0(f"Number of processes: {dist.get_world_size()}")
 
-    query = ['this is an apple', 'steak should be cooked medium rare', 'cmu is pittsburgh', 'apple sells laptop']
-    document = ['fruit', 'meat', 'school', 'company']
+    query = [
+        "this is an apple",
+        "steak should be cooked medium rare",
+        "cmu is pittsburgh",
+        "apple sells laptop",
+    ]
+    document = ["fruit", "meat", "school", "company"]
 
-    device = torch.device(f'cuda:{rank}')
+    device = torch.device(f"cuda:{rank}")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     encoder = AutoModel.from_pretrained("bert-base-uncased").to(device)
     model = ModelWrapper(encoder)
-    first = nn.parallel.DistributedDataParallel(model, device_ids=[rank], output_device=rank)
+    first = nn.parallel.DistributedDataParallel(
+        model, device_ids=[rank], output_device=rank
+    )
     scale = LogitScale(LogitScaleConfig())
 
     # NOTE! If using grad cache and > 1 gpu, you need to do the gather for the clip loss function yourself
-    gc = GradCache(models=[first, first], chunk_sizes=2, loss_fn=clip_loss, get_rep_fn=lambda v: v["embedding"])
-    xx = tokenizer(query, return_tensors='pt', padding=True).to(device)
-    yy = tokenizer(document, return_tensors='pt', padding=True).to(device)
+    gc = GradCache(
+        models=[first, first],
+        chunk_sizes=2,
+        loss_fn=clip_loss,
+        get_rep_fn=lambda v: v["embedding"],
+    )
+    xx = tokenizer(query, return_tensors="pt", padding=True).to(device)
+    yy = tokenizer(document, return_tensors="pt", padding=True).to(device)
 
     loss = gc(xx, yy, logit_scale=scale, no_sync_except_last=True, gather_enabled=True)
 
     print_rank0("GradCache")
     print_rank0(f"Loss: {loss}")
-    print_rank0(f"Sum of gradients: {sum([torch.sum(x.grad) for x in encoder.parameters()])}\n")
+    print_rank0(
+        f"Sum of gradients: {sum([torch.sum(x.grad) for x in encoder.parameters()])}\n"
+    )
     first.zero_grad()
     del model, first, gc, xx, yy, loss
 
-    xx = tokenizer(query, return_tensors='pt', padding=True).to(device)
-    yy = tokenizer(document, return_tensors='pt', padding=True).to(device)
+    xx = tokenizer(query, return_tensors="pt", padding=True).to(device)
+    yy = tokenizer(document, return_tensors="pt", padding=True).to(device)
 
     query_inputs = {
         "input_ids": xx["input_ids"],
@@ -85,27 +99,40 @@ if __name__ == "__main__":
 
     encoder = AutoModel.from_pretrained("bert-base-uncased").to(device)
     model = nn.parallel.DistributedDataParallel(
-        ModelWrapper(encoder), device_ids=[rank], output_device=rank, broadcast_buffers=False
+        ModelWrapper(encoder),
+        device_ids=[rank],
+        output_device=rank,
+        broadcast_buffers=False,
     )
 
     scale = LogitScale(LogitScaleConfig())
     our_loss = grad_cache_loss(
-        tower1=model, tower2=model, t1_inputs=query_inputs, t2_inputs=document_inputs, chunk_size=2, logit_scale=scale
+        tower1=model,
+        tower2=model,
+        t1_inputs=query_inputs,
+        t2_inputs=document_inputs,
+        chunk_size=2,
+        logit_scale=scale,
     )
 
     print_rank0("Our GradCache loss")
     print_rank0(f"Loss: {our_loss}")
-    print_rank0(f"Sum of gradients: {sum([torch.sum(x.grad) for x in model.parameters()])}\n")
+    print_rank0(
+        f"Sum of gradients: {sum([torch.sum(x.grad) for x in model.parameters()])}\n"
+    )
 
     model.zero_grad()
     del model, encoder, scale, our_loss, xx, yy
 
-    xx = tokenizer(query, return_tensors='pt', padding=True).to(device)
-    yy = tokenizer(document, return_tensors='pt', padding=True).to(device)
+    xx = tokenizer(query, return_tensors="pt", padding=True).to(device)
+    yy = tokenizer(document, return_tensors="pt", padding=True).to(device)
 
     encoder = AutoModel.from_pretrained("bert-base-uncased").to(device)
     model = nn.parallel.DistributedDataParallel(
-        ModelWrapper(encoder), device_ids=[rank], output_device=rank, broadcast_buffers=False
+        ModelWrapper(encoder),
+        device_ids=[rank],
+        output_device=rank,
+        broadcast_buffers=False,
     )
     scale = LogitScale(LogitScaleConfig())
 
@@ -116,4 +143,6 @@ if __name__ == "__main__":
     loss.backward()
     print_rank0("Our CLIP loss")
     print_rank0(f"Loss: {loss}")
-    print_rank0(f"Sum of gradients: {sum([torch.sum(x.grad) for x in model.parameters()])}")
+    print_rank0(
+        f"Sum of gradients: {sum([torch.sum(x.grad) for x in model.parameters()])}"
+    )

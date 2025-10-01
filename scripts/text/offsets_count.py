@@ -14,7 +14,7 @@ def parser_args():
 
     return parser.parse_args()
 
-    
+
 def read_jsonl(file, s3):
     idx2offset = {}
     count = 0
@@ -25,7 +25,7 @@ def read_jsonl(file, s3):
             idx2offset[i] = (previous, end)
             previous = end
             count += 1
-            
+
     return idx2offset, count
 
 
@@ -40,13 +40,12 @@ for path in tqdm(data_dir, desc="Processing languages"):
     if lang != "ca":
         continue
 
-
     counts = {"count_per_file": {}, "total_count": 0}
     offsets = {}
 
     files = s3.glob(f"{args.data_dir}/{lang}/shard-*.jsonl.gz")
     total_count = 0
-    pbar = tqdm(total=len(files), desc=f"Processing {lang}") 
+    pbar = tqdm(total=len(files), desc=f"Processing {lang}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
         future2file = {}

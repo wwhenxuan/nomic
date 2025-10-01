@@ -67,9 +67,15 @@ def print_rank0(*args, **kwargs):
 
 
 def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    token_embeddings = model_output[
+        0
+    ]  # First element of model_output contains all token embeddings
+    input_mask_expanded = (
+        attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    )
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        input_mask_expanded.sum(1), min=1e-9
+    )
 
 
 def embed(model, tokenizer, dataset, batch_size):
@@ -79,12 +85,16 @@ def embed(model, tokenizer, dataset, batch_size):
             batch_end = min(batch_start + batch_size, len(dataset))
             batch = dataset[batch_start:batch_end]
 
-            tokenized = tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(model.device)
+            tokenized = tokenizer(
+                batch, padding=True, truncation=True, return_tensors="pt"
+            ).to(model.device)
 
             model_output = model(**tokenized)
             pooled = mean_pooling(model_output, tokenized["attention_mask"])
             normalized_emb = F.normalize(pooled, p=2, dim=1)
-            doc2emb.update({doc: emb for doc, emb in zip(batch, normalized_emb.cpu().numpy())})
+            doc2emb.update(
+                {doc: emb for doc, emb in zip(batch, normalized_emb.cpu().numpy())}
+            )
 
     return doc2emb
 
@@ -97,10 +107,16 @@ def knn_neighbors(query2embed, index, batch_size, k):
         queries = [id2query[j] for j in range(i, min(i + batch_size, len(id2query)))]
         query_embs = [query2embed[query] for query in queries]
 
-        top_k_scores, top_k_indices = index.search(np.array(query_embs).astype(np.float32), k)
+        top_k_scores, top_k_indices = index.search(
+            np.array(query_embs).astype(np.float32), k
+        )
 
-        query2score.update({query: score for query, score in zip(queries, top_k_scores)})
-        query2indices.update({query: indices for query, indices in zip(queries, top_k_indices)})
+        query2score.update(
+            {query: score for query, score in zip(queries, top_k_scores)}
+        )
+        query2indices.update(
+            {query: indices for query, indices in zip(queries, top_k_indices)}
+        )
 
     assert len(query2score) == len(query2indices)
     assert len(query2embed) == len(query2score)
@@ -118,7 +134,9 @@ if __name__ == "__main__":
             output_dir.mkdir(parents=True)
 
     model_name = "thenlper/gte-base"
-    model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float16).to(f"cuda:{dist.get_rank()}")
+    model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float16).to(
+        f"cuda:{dist.get_rank()}"
+    )
 
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -169,7 +187,10 @@ if __name__ == "__main__":
                     if random == -1:
                         continue
 
-                    if id2doc[random] != data[args.document_key] and id2doc[random] != query:
+                    if (
+                        id2doc[random] != data[args.document_key]
+                        and id2doc[random] != query
+                    ):
                         kept_idxs.append(id2doc[random])
 
                 if len(kept_idxs) == remaining:
@@ -178,7 +199,11 @@ if __name__ == "__main__":
             data[args.negatives_key].extend(kept_idxs)
 
     metadata = {
-        "objective": {"self": [], "paired": [], "triplet": [[args.query_key, args.document_key, args.negatives_key]]}
+        "objective": {
+            "self": [],
+            "paired": [],
+            "triplet": [[args.query_key, args.document_key, args.negatives_key]],
+        }
     }
     shard_size = 100_000
     for shard_start in tqdm(range(0, len(dataset), shard_size), desc="Writing shards"):

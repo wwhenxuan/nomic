@@ -21,7 +21,11 @@ def parse_args():
 
 
 args = parse_args()
-query_key, document_key, negatives_key = args.query_key, args.document_key, args.negatives_key
+query_key, document_key, negatives_key = (
+    args.query_key,
+    args.document_key,
+    args.negatives_key,
+)
 
 files = list(Path(args.dataset).glob("*.jsonl.gz"))
 
@@ -54,7 +58,9 @@ for record in tqdm(lines):
 
     if len(filtered_negatives) < args.min_negatives:
         while True:
-            sampled = random.sample(all_documents, args.min_negatives - len(filtered_negatives))
+            sampled = random.sample(
+                all_documents, args.min_negatives - len(filtered_negatives)
+            )
             filtered_sampled = []
             for sample in sampled:
                 if sample not in filtered_negatives and sample != document:
@@ -72,7 +78,13 @@ for record in tqdm(lines):
         "pos_score": document_score,
         "scores": filtered_scores,
     }
-    new_record["metadata"] = {"objective": {'self': [], "paired": [], "triplet": [["query", "document", "negatives"]]}}
+    new_record["metadata"] = {
+        "objective": {
+            "self": [],
+            "paired": [],
+            "triplet": [["query", "document", "negatives"]],
+        }
+    }
 
     processed_records.append(new_record)
 
@@ -90,7 +102,9 @@ for shard_num in range(0, len(processed_records), shard_size):
         for record in tqdm(processed_records[shard_num : shard_num + shard_size]):
             f.write(json.dumps(record) + "\n")
 
-    counts["count_per_file"][f"contrastive/{outdir.name}/shard-{shard_name:05d}.jsonl.gz"] = num_lines
+    counts["count_per_file"][
+        f"contrastive/{outdir.name}/shard-{shard_name:05d}.jsonl.gz"
+    ] = num_lines
 
 idx2offset = {}
 for file in tqdm(list(outdir.glob("*.jsonl.gz"))):

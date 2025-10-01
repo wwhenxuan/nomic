@@ -11,7 +11,6 @@ from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 
 
-
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--dataset", type=str)
@@ -26,6 +25,7 @@ def parse_args():
     parser.add_argument("--negatives_key", default="neg")
 
     return parser.parse_args()
+
 
 def load_beir(beir_path):
     corpus, queries, qrels = GenericDataLoader(beir_path).load(split="train")
@@ -47,7 +47,7 @@ def load_beir(beir_path):
 if __name__ == "__main__":
     args = parse_args()
     if args.dataset is not None:
-        names = [args.dataset] 
+        names = [args.dataset]
     else:
         names = ["beir/hotpotqa", "beir/fever", "beir/msmarco", "beir/nq"]
 
@@ -65,22 +65,30 @@ if __name__ == "__main__":
         model = SentenceTransformer(model_name)
         dimension = model.get_sentence_embedding_dimension()
 
-        if not Path(output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy").exists():
+        if not Path(
+            output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy"
+        ).exists():
             pool = model.start_multi_process_pool()
 
-            document_embeddings = model.encode_multi_process(documents,
-                                            pool=pool,
-                                            show_progress_bar=True, 
-                                            batch_size=args.batch_size, 
-                                            normalize_embeddings=True,
-                                            )
+            document_embeddings = model.encode_multi_process(
+                documents,
+                pool=pool,
+                show_progress_bar=True,
+                batch_size=args.batch_size,
+                normalize_embeddings=True,
+            )
 
-            # save corpus embeddings since it's the most expensive part embeddings 
-            np.save(output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy", document_embeddings)
+            # save corpus embeddings since it's the most expensive part embeddings
+            np.save(
+                output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy",
+                document_embeddings,
+            )
 
             model.stop_multi_process_pool(pool)
         else:
-            document_embeddings = np.load(output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy")
+            document_embeddings = np.load(
+                output_dir / f"{model_name.split('/')[-1]}_document_embeddings.npy"
+            )
 
         min_negatives = args.k
         margin = args.margin
@@ -93,16 +101,18 @@ if __name__ == "__main__":
         for batch_start in tqdm(range(0, len(qids), batch_size)):
             batch_end = min(batch_start + batch_size, len(qids))
             batch_qids = qids[batch_start:batch_end]
-            
+
             # Batch encode queries
             batch_texts = [queries[qid] for qid in batch_qids]
-            query_embs = model.encode(batch_texts, normalize_embeddings=True, prompt_name=query_prompt_name)
+            query_embs = model.encode(
+                batch_texts, normalize_embeddings=True, prompt_name=query_prompt_name
+            )
 
             # Batch compute similarities
             # Shape: [batch_size, num_documents]
             # in document idx order
             qd_sims = model.similarity(query_embs, document_embeddings)
-            
+
             # Get top-k for all queries at once
             # scores shape: [batch_size, num_documents]
             # indices shape: [batch_size, num_documents]
@@ -114,24 +124,26 @@ if __name__ == "__main__":
                 query_text = queries[query_id]
                 pos_doc_ids = list(qrels[query_id])
                 pos_doc_idxs = [docid2index[doc_id] for doc_id in pos_doc_ids]
-                
+
                 # Get this query's scores and indices
                 query_scores = scores[batch_idx]
                 query_indices = indices[batch_idx]
 
                 for pos_doc_id, pos_doc_idx in zip(pos_doc_ids, pos_doc_idxs):
                     document = corpus[pos_doc_id]
-                    document = (document.get("title") + " " + document.get("text")).strip()
+                    document = (
+                        document.get("title") + " " + document.get("text")
+                    ).strip()
 
                     qd_score = qd_sims[batch_idx, pos_doc_idx]
                     threshold = qd_score * margin
 
                     row = {args.query_key: query_text, args.document_key: document}
-                    
+
                     neg_indices = query_indices[
-                        (query_scores < threshold) & 
-                        (~torch.isin(query_indices, torch.tensor(pos_doc_idxs)))
-                    ][:args.max_negatives]
+                        (query_scores < threshold)
+                        & (~torch.isin(query_indices, torch.tensor(pos_doc_idxs)))
+                    ][: args.max_negatives]
 
                     if len(neg_indices) < min_negatives:
                         lt_negatives += 1
@@ -147,10 +159,16 @@ if __name__ == "__main__":
         random.shuffle(mined_dataset)
 
         metadata = {
-            "objective": {"self": [], "paired": [], "triplet": [[args.query_key, args.document_key, args.negatives_key]]}
+            "objective": {
+                "self": [],
+                "paired": [],
+                "triplet": [[args.query_key, args.document_key, args.negatives_key]],
+            }
         }
         shard_size = 100_000
-        for shard_start in tqdm(range(0, len(mined_dataset), shard_size), desc="Writing shards"):
+        for shard_start in tqdm(
+            range(0, len(mined_dataset), shard_size), desc="Writing shards"
+        ):
             dataset_slice = mined_dataset[shard_start : shard_start + shard_size]
             for record in dataset_slice:
                 record["metadata"] = metadata

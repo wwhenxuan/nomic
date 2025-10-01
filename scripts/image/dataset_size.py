@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 
 def get_dataset_size(shard):
-    fs = fsspec.filesystem('s3')
+    fs = fsspec.filesystem("s3")
     try:
         with fs.open(shard.replace(".tar", "_stats.json"), "r") as f:
             stats = json.load(f)
@@ -32,7 +32,9 @@ if __name__ == "__main__":
         help="Path to the shards",
         default="s3://commonpool-medium/shards/{00000000..00012895}.tar",
     )
-    parser.add_argument("--workers", type=int, help="Number of workers", default=mp.cpu_count())
+    parser.add_argument(
+        "--workers", type=int, help="Number of workers", default=mp.cpu_count()
+    )
     args = parser.parse_args()
     shards = args.shards
 
@@ -53,8 +55,12 @@ if __name__ == "__main__":
             total_size += shard_size
             pbar.update(1)
     else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=mp.cpu_count()) as executor:
-            future2shard = {executor.submit(get_dataset_size, shard): shard for shard in shards_list}
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=mp.cpu_count()
+        ) as executor:
+            future2shard = {
+                executor.submit(get_dataset_size, shard): shard for shard in shards_list
+            }
 
             for future in concurrent.futures.as_completed(future2shard):
                 shard = future2shard[future]

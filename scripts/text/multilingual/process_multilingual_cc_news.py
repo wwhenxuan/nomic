@@ -9,12 +9,186 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 
 
-LANGS = ['af', 'als', 'am', 'an', 'ar', 'arz', 'as', 'ast', 'av', 'az', 'azb', 'ba', 'bar', 'bcl', 'be', 'bg', 'bh', 'bn', 'bo', 'bpy', 'br', 'bs', 'bxr', 'ca', 'cbk', 'ce', 'ceb', 'ckb', 'co', 'cs', 'cv', 'cy', 'da', 'de', 'diq', 'dsb', 'dty', 'dv', 'el', 'eml', 'en', 'eo', 'es', 'et', 'eu', 'fa', 'fi', 'fr', 'fy', 'ga', 'gd', 'gl', 'gn', 'gom', 'gu', 'gv', 'he', 'hi', 'hif', 'hr', 'hsb', 'ht', 'hu', 'hy', 'ia', 'id', 'ie', 'ilo', 'io', 'is', 'it', 'ja', 'jbo', 'jv', 'ka', 'kk', 'km', 'kn', 'ko', 'krc', 'ku', 'kv', 'kw', 'ky', 'la', 'lb', 'lez', 'li', 'lmo', 'lo', 'lt', 'lv', 'mai', 'mg', 'mhr', 'min', 'mk', 'ml', 'mn', 'mr', 'mrj', 'ms', 'mt', 'mwl', 'my', 'myv', 'mzn', 'nah', 'nap', 'nds', 'ne', 'new', 'nl', 'nn', 'no', 'oc', 'or', 'os', 'pa', 'pam', 'pfl', 'pl', 'pms', 'pnb', 'ps', 'pt', 'qu', 'rm', 'ro', 'ru', 'sa', 'sah', 'sc', 'scn', 'sco', 'sd', 'sh', 'si', 'sk', 'sl', 'so', 'sq', 'sr', 'su', 'sv', 'sw', 'ta', 'te', 'tg', 'th', 'tk', 'tl', 'tr', 'tt', 'tyv', 'ug', 'uk', 'ur', 'uz', 'vec', 'vep', 'vi', 'vls', 'vo', 'wa', 'war', 'wuu', 'xal', 'xmf', 'yi', 'yo', 'yue', 'zh']
+LANGS = [
+    "af",
+    "als",
+    "am",
+    "an",
+    "ar",
+    "arz",
+    "as",
+    "ast",
+    "av",
+    "az",
+    "azb",
+    "ba",
+    "bar",
+    "bcl",
+    "be",
+    "bg",
+    "bh",
+    "bn",
+    "bo",
+    "bpy",
+    "br",
+    "bs",
+    "bxr",
+    "ca",
+    "cbk",
+    "ce",
+    "ceb",
+    "ckb",
+    "co",
+    "cs",
+    "cv",
+    "cy",
+    "da",
+    "de",
+    "diq",
+    "dsb",
+    "dty",
+    "dv",
+    "el",
+    "eml",
+    "en",
+    "eo",
+    "es",
+    "et",
+    "eu",
+    "fa",
+    "fi",
+    "fr",
+    "fy",
+    "ga",
+    "gd",
+    "gl",
+    "gn",
+    "gom",
+    "gu",
+    "gv",
+    "he",
+    "hi",
+    "hif",
+    "hr",
+    "hsb",
+    "ht",
+    "hu",
+    "hy",
+    "ia",
+    "id",
+    "ie",
+    "ilo",
+    "io",
+    "is",
+    "it",
+    "ja",
+    "jbo",
+    "jv",
+    "ka",
+    "kk",
+    "km",
+    "kn",
+    "ko",
+    "krc",
+    "ku",
+    "kv",
+    "kw",
+    "ky",
+    "la",
+    "lb",
+    "lez",
+    "li",
+    "lmo",
+    "lo",
+    "lt",
+    "lv",
+    "mai",
+    "mg",
+    "mhr",
+    "min",
+    "mk",
+    "ml",
+    "mn",
+    "mr",
+    "mrj",
+    "ms",
+    "mt",
+    "mwl",
+    "my",
+    "myv",
+    "mzn",
+    "nah",
+    "nap",
+    "nds",
+    "ne",
+    "new",
+    "nl",
+    "nn",
+    "no",
+    "oc",
+    "or",
+    "os",
+    "pa",
+    "pam",
+    "pfl",
+    "pl",
+    "pms",
+    "pnb",
+    "ps",
+    "pt",
+    "qu",
+    "rm",
+    "ro",
+    "ru",
+    "sa",
+    "sah",
+    "sc",
+    "scn",
+    "sco",
+    "sd",
+    "sh",
+    "si",
+    "sk",
+    "sl",
+    "so",
+    "sq",
+    "sr",
+    "su",
+    "sv",
+    "sw",
+    "ta",
+    "te",
+    "tg",
+    "th",
+    "tk",
+    "tl",
+    "tr",
+    "tt",
+    "tyv",
+    "ug",
+    "uk",
+    "ur",
+    "uz",
+    "vec",
+    "vep",
+    "vi",
+    "vls",
+    "vo",
+    "wa",
+    "war",
+    "wuu",
+    "xal",
+    "xmf",
+    "yi",
+    "yo",
+    "yue",
+    "zh",
+]
 SHARD_SIZE = 100_000
 
 
 def parse_args():
-    parser =  ArgumentParser()
+    parser = ArgumentParser()
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--bucket", required=True)
     parser.add_argument("-j", "--workers", default=mp.cpu_count(), type=int)
@@ -23,7 +197,7 @@ def parse_args():
 
     return parser.parse_args()
 
-    
+
 def process_shard(ds, shard_index, bucket, num_splits, query_col, document_col):
     ds_shard = ds.shard(num_shards=num_splits, index=shard_index)
 
@@ -48,19 +222,21 @@ def process_shard(ds, shard_index, bucket, num_splits, query_col, document_col):
 
     Path(f"/tmp/{shard_name}").unlink()
 
-    return shard_name 
-    
-    
+    return shard_name
+
+
 if __name__ == "__main__":
-    args = parse_args() 
+    args = parse_args()
 
     for lang in tqdm(LANGS):
         # process each lang with `workers` using concurrent futures
         print(f"Processing {lang}")
 
-        ds = load_dataset(args.dataset, lang, split="train", trust_remote_code=True, num_proc=8)
+        ds = load_dataset(
+            args.dataset, lang, split="train", trust_remote_code=True, num_proc=8
+        )
 
-        num_shards = (len(ds) // SHARD_SIZE)
+        num_shards = len(ds) // SHARD_SIZE
         if len(ds) % SHARD_SIZE != 0:
             num_shards += 1
 
@@ -69,10 +245,20 @@ if __name__ == "__main__":
             Path(f"/tmp/{lang_bucket}").mkdir(parents=True, exist_ok=True)
 
         pbar = tqdm(total=num_shards, desc=f"Processing {lang}", position=1, leave=True)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=args.workers
+        ) as executor:
             futures = []
             for i in range(num_shards):
-                future = executor.submit(process_shard, ds, i, lang_bucket, num_shards, args.query_col, args.document_col)
+                future = executor.submit(
+                    process_shard,
+                    ds,
+                    i,
+                    lang_bucket,
+                    num_shards,
+                    args.query_col,
+                    args.document_col,
+                )
                 future.add_done_callback(lambda _: pbar.update(1))
                 futures.append(future)
 
@@ -81,7 +267,7 @@ if __name__ == "__main__":
                 print(result)
 
         pbar.close()
-        
+
         # delete all files in /tmp/lang_bucket
         for file in Path(f"/tmp/{lang_bucket}").glob("*"):
             file.unlink()

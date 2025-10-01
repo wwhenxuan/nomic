@@ -67,7 +67,13 @@ def load_dataset(path, query_key, document_key, negatives_key):
 
                     seen_documents.update([neg[document_key] for neg in negatives])
 
-                    documents.extend([neg for neg in negatives if neg[document_key] not in seen_documents])
+                    documents.extend(
+                        [
+                            neg
+                            for neg in negatives
+                            if neg[document_key] not in seen_documents
+                        ]
+                    )
 
                 seen_documents.add(docs)
 
@@ -82,15 +88,23 @@ def print_rank0(*args, **kwargs):
 
 
 def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0]  # First element of model_output contains all token embeddings
-    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    token_embeddings = model_output[
+        0
+    ]  # First element of model_output contains all token embeddings
+    input_mask_expanded = (
+        attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    )
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        input_mask_expanded.sum(1), min=1e-9
+    )
 
 
 def embed(model, tokenizer, dataset, batch_size, key, add_title=False):
     embeddings = []
     with torch.no_grad():
-        for batch_start in tqdm(range(0, len(dataset), batch_size), desc=f"Embedding {key}"):
+        for batch_start in tqdm(
+            range(0, len(dataset), batch_size), desc=f"Embedding {key}"
+        ):
             batch_end = min(batch_start + batch_size, len(dataset))
             batch = dataset[batch_start:batch_end]
             if add_title:
@@ -98,7 +112,9 @@ def embed(model, tokenizer, dataset, batch_size, key, add_title=False):
             else:
                 batch = [line[key] for line in batch]
 
-            tokenized = tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(model.device)
+            tokenized = tokenizer(
+                batch, padding=True, truncation=True, return_tensors="pt"
+            ).to(model.device)
 
             model_output = model(**tokenized)
             pooled = mean_pooling(model_output, tokenized["attention_mask"])
@@ -112,7 +128,9 @@ def knn_neighbors(queries, index, batch_size, k):
     all_scores, all_indices = [], []
     for i in tqdm(range(0, len(queries), batch_size), disable=dist.get_rank() != 0):
         query_embs = queries[i : i + batch_size]
-        top_k_scores, top_k_indices = index.search(np.array(query_embs).astype(np.float32), k)
+        top_k_scores, top_k_indices = index.search(
+            np.array(query_embs).astype(np.float32), k
+        )
 
         all_scores.extend(top_k_scores)
         all_indices.extend(top_k_indices)
@@ -131,17 +149,28 @@ if __name__ == "__main__":
             output_dir.mkdir(parents=True)
 
     model_name = "thenlper/gte-base"
-    model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float16).to(f"cuda:{dist.get_rank()}")
+    model = AutoModel.from_pretrained(model_name, torch_dtype=torch.float16).to(
+        f"cuda:{dist.get_rank()}"
+    )
 
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.model_max_length = 512
 
     # initialize once in case we have more than one iteration
-    queries, documents, dataset = load_dataset(args.dataset, args.query_key, args.document_key, args.negatives_key)
+    queries, documents, dataset = load_dataset(
+        args.dataset, args.query_key, args.document_key, args.negatives_key
+    )
 
     q_embed = embed(model, tokenizer, queries, args.batch_size, args.query_key)
-    d_embed = embed(model, tokenizer, documents, args.batch_size, args.document_key, add_title=args.add_title)
+    d_embed = embed(
+        model,
+        tokenizer,
+        documents,
+        args.batch_size,
+        args.document_key,
+        add_title=args.add_title,
+    )
 
     del model
     torch.cuda.empty_cache()
@@ -165,26 +194,42 @@ if __name__ == "__main__":
             selected_doc = documents[inx]
             # assuming this is NQ
             if isinstance(data[args.document_key], list):
-                if documents[inx] not in data['positive_ctxs'] and documents[inx]["text"] != query:
+                if (
+                    documents[inx] not in data["positive_ctxs"]
+                    and documents[inx]["text"] != query
+                ):
                     filtered_inx.append(inx)
             else:
-                if documents[inx] != data[args.document_key] and documents[inx] != query:
+                if (
+                    documents[inx] != data[args.document_key]
+                    and documents[inx] != query
+                ):
                     filtered_inx.append(inx)
 
-        data[args.negatives_key] = [documents[inx][args.document_key] for inx in filtered_inx]
+        data[args.negatives_key] = [
+            documents[inx][args.document_key] for inx in filtered_inx
+        ]
         if len(data[args.negatives_key]) < args.k:
             remaining = args.k - len(data[args.negatives_key])
             while True:
-                random_idx = np.random.randint(0, len(documents), size=remaining).tolist()
+                random_idx = np.random.randint(
+                    0, len(documents), size=remaining
+                ).tolist()
                 kept_idxs = []
                 for random in random_idx:
                     if random == -1:
                         continue
                     if isinstance(data[args.document_key], list):
-                        if documents[random] not in data['positive_ctxs'] and documents[random]["text"] != query:
+                        if (
+                            documents[random] not in data["positive_ctxs"]
+                            and documents[random]["text"] != query
+                        ):
                             kept_idxs.append(documents[random])
                     else:
-                        if documents[random] != data[args.document_key] and documents[random] != query:
+                        if (
+                            documents[random] != data[args.document_key]
+                            and documents[random] != query
+                        ):
                             kept_idxs.append(documents[random])
                 if len(kept_idxs) == remaining:
                     break
@@ -192,7 +237,11 @@ if __name__ == "__main__":
             data["negatives"].extend(kept_idxs)
 
     metadata = {
-        "objective": {"self": [], "paired": [], "triplet": [[args.query_key, args.document_key, args.negatives_key]]}
+        "objective": {
+            "self": [],
+            "paired": [],
+            "triplet": [[args.query_key, args.document_key, args.negatives_key]],
+        }
     }
     shard_size = 100_000
     for shard_start in tqdm(range(0, len(dataset), shard_size), desc="Writing shards"):

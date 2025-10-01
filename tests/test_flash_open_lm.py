@@ -9,7 +9,9 @@ def test_openlm_forward():
     config = open_lm_config_to_gpt2_config(config)
 
     flash_model = (
-        DecoderModel.from_pretrained("nomic-ai/open_lm_1B", config=config, safe_serialization=True)
+        DecoderModel.from_pretrained(
+            "nomic-ai/open_lm_1B", config=config, safe_serialization=True
+        )
         .to("cuda")
         .to(torch.bfloat16)
     )
@@ -19,14 +21,18 @@ def test_openlm_forward():
     inputs["attention_mask"] = torch.ones_like(inputs["input_ids"]).to("cuda").long()
 
     bf16_model = (
-        AutoModelForCausalLM.from_pretrained("nomic-ai/open_lm_1B", trust_remote_code=True)
+        AutoModelForCausalLM.from_pretrained(
+            "nomic-ai/open_lm_1B", trust_remote_code=True
+        )
         .to("cuda")
         .to(torch.bfloat16)
     )
 
     assert sum(
         p.numel() for p in bf16_model.model.parameters() if p.requires_grad
-    ) - bf16_model.model.output.weight.numel() == sum(p.numel() for p in flash_model.parameters() if p.requires_grad)
+    ) - bf16_model.model.output.weight.numel() == sum(
+        p.numel() for p in flash_model.parameters() if p.requires_grad
+    )
     flash_outputs = flash_model(**inputs)
 
     bf16_outputs = bf16_model(**inputs)
@@ -36,7 +42,11 @@ def test_openlm_forward():
     del bf16_model
 
     model = (
-        AutoModelForCausalLM.from_pretrained("nomic-ai/open_lm_1B", trust_remote_code=True).to("cuda").to(torch.float32)
+        AutoModelForCausalLM.from_pretrained(
+            "nomic-ai/open_lm_1B", trust_remote_code=True
+        )
+        .to("cuda")
+        .to(torch.float32)
     )
 
     fp32_outputs = model(**inputs)
@@ -50,9 +60,13 @@ def test_openlm_forward():
     print((bf16_hidden_states - fp32_hidden_states).abs().max().item())
     print((bf16_hidden_states - fp32_hidden_states).abs().mean().item())
 
-    assert (flash_outputs.last_hidden_state - fp32_hidden_states).abs().max().item() <= 1.25 * (
+    assert (
+        flash_outputs.last_hidden_state - fp32_hidden_states
+    ).abs().max().item() <= 1.25 * (
         bf16_hidden_states - fp32_hidden_states
     ).abs().max().item()
-    assert (flash_outputs.last_hidden_state - fp32_hidden_states).abs().mean().item() <= 1.25 * (
+    assert (
+        flash_outputs.last_hidden_state - fp32_hidden_states
+    ).abs().mean().item() <= 1.25 * (
         bf16_hidden_states - fp32_hidden_states
     ).abs().mean().item()

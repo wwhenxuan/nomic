@@ -2,7 +2,11 @@ from argparse import ArgumentParser
 
 from contrastors.models.biencoder import BiEncoder, BiEncoderConfig
 from contrastors.models.dual_encoder import DualEncoder, DualEncoderConfig
-from contrastors.models.huggingface import NomicBertConfig, NomicBertForPreTraining, NomicVisionModel
+from contrastors.models.huggingface import (
+    NomicBertConfig,
+    NomicBertForPreTraining,
+    NomicVisionModel,
+)
 
 
 def parse_args():

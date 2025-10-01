@@ -17,8 +17,14 @@ def test_openclip_forward(model_name):
     config = AutoConfig.from_pretrained(model_name)
     config = clip_config_to_vit_config(config)
 
-    flash_model = ViTModel.from_pretrained(model_name, config=config).to("cuda").to(torch.bfloat16)
-    bf16_model = AutoModel.from_pretrained(model_name).vision_model.to("cuda").to(torch.bfloat16)
+    flash_model = (
+        ViTModel.from_pretrained(model_name, config=config)
+        .to("cuda")
+        .to(torch.bfloat16)
+    )
+    bf16_model = (
+        AutoModel.from_pretrained(model_name).vision_model.to("cuda").to(torch.bfloat16)
+    )
 
     assert sum(p.numel() for p in bf16_model.parameters() if p.requires_grad) == sum(
         p.numel() for p in flash_model.parameters() if p.requires_grad
@@ -37,7 +43,9 @@ def test_openclip_forward(model_name):
     del flash_model
     del bf16_model
 
-    model = AutoModel.from_pretrained(model_name).vision_model.to("cuda").to(torch.float32)
+    model = (
+        AutoModel.from_pretrained(model_name).vision_model.to("cuda").to(torch.float32)
+    )
 
     fp32_outputs = model(pixel_values=processed["pixel_values"].to(torch.float32))
 
@@ -49,9 +57,13 @@ def test_openclip_forward(model_name):
     print((bf16_outputs.pooler_output - fp32_outputs.pooler_output).abs().max().item())
     print((bf16_outputs.pooler_output - fp32_outputs.pooler_output).abs().mean().item())
 
-    assert (flash_pooler_outputs - fp32_outputs.pooler_output).abs().max().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.pooler_output
+    ).abs().max().item() <= 3.0 * (
         bf16_outputs.pooler_output - fp32_outputs.pooler_output
     ).abs().max().item()
-    assert (flash_pooler_outputs - fp32_outputs.pooler_output).abs().mean().item() <= 3.0 * (
+    assert (
+        flash_pooler_outputs - fp32_outputs.pooler_output
+    ).abs().mean().item() <= 3.0 * (
         bf16_outputs.pooler_output - fp32_outputs.pooler_output
     ).abs().mean().item()
