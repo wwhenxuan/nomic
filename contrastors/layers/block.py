@@ -25,8 +25,9 @@ from megablocks.layers.arguments import Arguments
 
 
 class ParallelBlock(nn.Module):
-    """The attention (mixer) and MLP blocks are done in parallel, similar to GPT-J, GPT-NeoX,
-    and PaLM.
+    """
+    The attention (mixer) and MLP blocks are done in parallel, 
+    similar to GPT-J, GPT-NeoX, and PaLM.
     """
 
     def __init__(
@@ -102,7 +103,8 @@ class ParallelBlock(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ):
-        r"""Pass the input through the encoder layer.
+        r"""
+        Pass the input through the encoder layer.
 
         Args:
             hidden_states1: the output of the previous attention (mixer) or embedding layer.

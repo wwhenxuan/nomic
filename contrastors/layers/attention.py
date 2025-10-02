@@ -100,7 +100,7 @@ class FlashAttention(nn.Module):
             # uses the head dimension instead of the sequence dimension for open_lm
             self.rotary_head_dim = getattr(config, "rotary_head_dim", False)
 
-        # 进行qkv键值的嵌入
+        # 进行qkv键值的嵌入 单次QKV投影提高效率
         linear_cls = nn.Linear if not config.fused_bias_fc else FusedDense
         self.Wqkv = linear_cls(self.embed_dim, qkv_dim, bias=config.qkv_proj_bias)
 
@@ -136,11 +136,14 @@ class FlashAttention(nn.Module):
 
         qkv = self.Wqkv(hidden_states)
         
+        # 单次QKV投影提高效率
         if self.num_heads == self.num_heads_kv:
+            # 标准多头注意力：Q、K、V头数相同
             qkv = rearrange(
                 qkv, "... (three h d) -> ... three h d", three=3, d=self.head_dim
             )
         else:
+            # MQA/GQA：K、V头数少于Q头数
             q, kv = qkv.split(
                 [self.num_heads * self.head_dim, self.num_heads_kv * self.head_dim * 2],
                 dim=-1,
@@ -154,6 +157,7 @@ class FlashAttention(nn.Module):
                 d=self.head_dim,
             )
 
+        # KV缓存处理
         past_key_value = (past_key_value, past_len + qkv.size(1)) if use_cache else None
 
         if self.rotary_emb_dim > 0:
