@@ -26,6 +26,9 @@ class FlashAttention(nn.Module):
 
     def __init__(
         self,
+        
+        embed_dim: int,
+        n_heads: int,
         config,
     ) -> None:
         """
@@ -39,16 +42,20 @@ class FlashAttention(nn.Module):
         self.use_flash_attn = config.use_flash_attn
         self.fused_bias_fc = config.fused_bias_fc
 
+        # 注意力机制的头数
         self.num_heads = config.n_head
         self.num_heads_kv = (
             config.num_heads_kv
             if getattr(config, "num_heads_kv", None) is not None
             else self.num_heads
         )
+        
+        # 获取每个注意力机制的具体维度
         assert (
             self.embed_dim % self.num_heads == 0
         ), "embed_dim must be divisible by num_heads"
         self.head_dim = self.embed_dim // self.num_heads
+        
         # we don't really support mqa / gqa for now
         qkv_dim = self.head_dim * (self.num_heads + 2 * self.num_heads_kv)
 
@@ -60,6 +67,7 @@ class FlashAttention(nn.Module):
             persistent=False,
         )
 
+        # 处理与旋转注意力机制相关的信息
         self.rotary_emb_dim = self.head_dim * config.rotary_emb_fraction
         if self.rotary_emb_dim > 0:
             if getattr(config, "rotary_scaling_factor", None):
@@ -92,12 +100,15 @@ class FlashAttention(nn.Module):
             # uses the head dimension instead of the sequence dimension for open_lm
             self.rotary_head_dim = getattr(config, "rotary_head_dim", False)
 
+        # 进行qkv键值的嵌入
         linear_cls = nn.Linear if not config.fused_bias_fc else FusedDense
         self.Wqkv = linear_cls(self.embed_dim, qkv_dim, bias=config.qkv_proj_bias)
 
+        # 输出最后注意力机制的映射
         self.out_proj = linear_cls(
             self.embed_dim, self.embed_dim, bias=config.qkv_proj_bias
         )
+        
         self.causal = config.causal
         self.drop = nn.Dropout(config.attn_pdrop)
         self.num_prefix_tokens = max(getattr(config, "register_tokens", 1), 1)
@@ -124,6 +135,7 @@ class FlashAttention(nn.Module):
             past_len = 0
 
         qkv = self.Wqkv(hidden_states)
+        
         if self.num_heads == self.num_heads_kv:
             qkv = rearrange(
                 qkv, "... (three h d) -> ... three h d", three=3, d=self.head_dim
