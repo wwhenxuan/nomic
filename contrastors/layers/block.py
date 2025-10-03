@@ -26,7 +26,7 @@ from megablocks.layers.arguments import Arguments
 
 class ParallelBlock(nn.Module):
     """
-    The attention (mixer) and MLP blocks are done in parallel, 
+    The attention (mixer) and MLP blocks are done in parallel,
     similar to GPT-J, GPT-NeoX, and PaLM.
     """
 
@@ -229,9 +229,11 @@ class Block(nn.Module):
                     fp16=False,
                     bf16=False,
                     return_bias=False,
-                    moe_loss_weight=0.0
-                    if config.expert_choice_router
-                    else config.router_aux_loss_coef,
+                    moe_loss_weight=(
+                        0.0
+                        if config.expert_choice_router
+                        else config.router_aux_loss_coef
+                    ),
                     shared_expert=shared_experts > 0,
                     shared_expert_hidden_size=(config.n_inner // config.ffn_div)
                     * shared_experts,

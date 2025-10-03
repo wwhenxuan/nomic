@@ -172,9 +172,11 @@ class GlueTrainer(BaseTrainer):
 
         return {
             "train": train_dataloader,
-            "val": (val_dataloader, val_mm_dataloader)
-            if data_config.task_name == "mnli"
-            else val_dataloader,
+            "val": (
+                (val_dataloader, val_mm_dataloader)
+                if data_config.task_name == "mnli"
+                else val_dataloader
+            ),
             "test": None,
         }
 

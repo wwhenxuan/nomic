@@ -16,19 +16,6 @@ def quick_gelu(input):
     return input * torch.sigmoid(1.702 * input)
 
 
-# def get_activation(activation: Union[nn.Module, str]) -> nn.Module:
-#     """选择使用的激活函数"""
-#     if callable(activation):
-#         return activation()
-#     elif activation.lower() == "relu":
-#         return nn.ReLU()
-#     elif activation.lower() == "gelu":
-#         return nn.GELU()
-#     raise ValueError(
-#         f'{activation} is not available. You can use "relu", "gelu", or a callable'
-#     )
-
-
 def get_activation(activation: Union[nn.Module, str]) -> nn.Module:
     """
     根据输入的字符串来获取使用的激活函数。

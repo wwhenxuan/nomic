@@ -154,9 +154,9 @@ class TextTextTrainer(BaseTrainer):
         if model_config.checkpoint is None:
             model_config_dict = model_config.dict()
             if config.train_args.router_aux_loss_coef is not None:
-                model_config_dict[
-                    "router_aux_loss_coef"
-                ] = config.train_args.router_aux_loss_coef
+                model_config_dict["router_aux_loss_coef"] = (
+                    config.train_args.router_aux_loss_coef
+                )
             config = BiEncoderConfig(**model_config_dict)
             model = BiEncoder(config)
         else:

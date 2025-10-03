@@ -46,9 +46,9 @@ def clip_config_to_vit_config(clip_config: CLIPConfig) -> GPT2Config:
         mlp_fc2_bias=getattr(clip_config, "mlp_fc2_bias", True),
         use_rms_norm=False,
         causal=False,
-        hidden_features_scaling_factor=2.0 / 3.0
-        if getattr(clip_config, "use_swiglu_ffn", False)
-        else 1.0,
+        hidden_features_scaling_factor=(
+            2.0 / 3.0 if getattr(clip_config, "use_swiglu_ffn", False) else 1.0
+        ),
         mask_token=False,
         learned_pos_embedding=False,
         patch_dropout=0.0,

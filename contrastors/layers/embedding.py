@@ -640,7 +640,6 @@ def create_position_ids_from_input_ids(
     return incremental_indices.long() + padding_idx
 
 
-
 class ResidualEmbedding(nn.Module):
     """基于残差连接方法构建时间序列Patch的嵌入模块"""
 
@@ -673,7 +672,6 @@ class ResidualEmbedding(nn.Module):
         res = self.residual_layer(x)
         out = out + res
         return out
-        
 
 
 class BertEmbeddings(nn.Module):
@@ -690,9 +688,9 @@ class BertEmbeddings(nn.Module):
             config.max_position_embeddings if config.rotary_emb_fraction <= 0 else 0
         )
         self.type_vocab_size = getattr(config, "type_vocab_size", 0)
-        
+
         self.pad_token_id = config.pad_token_id
-        
+
         # TODO: 注意这里不同的位置编码
         if self.max_position_embeddings > 0 and config.rotary_emb_fraction <= 0:
             self.position_embeddings = nn.Embedding(
@@ -725,7 +723,7 @@ class BertEmbeddings(nn.Module):
                     )
             position_embeddings = self.position_embeddings(position_ids)
             embeddings = embeddings + position_embeddings
-            
+
         if self.type_vocab_size > 0:
             if token_type_ids is None:
                 token_type_ids = torch.zeros(
@@ -734,24 +732,26 @@ class BertEmbeddings(nn.Module):
             token_type_embeddings = self.token_type_embeddings(token_type_ids)
             embeddings = embeddings + token_type_embeddings
         return embeddings
-    
+
 
 class TimeEmbeddings(nn.Module):
     """
     以通道独立的方式对输入的时间序列数据进行嵌入。
     input: [batch_size * num_vars, num_tokens, patch_len],
     output: [batch_size * num_vars, num_tokens, d_model].
-    
+
     这里提供了直接嵌入和残差嵌入两种不同的嵌入形式。
     """
-    
-    def __init__(self, 
-                 patch_len: int,
-                 d_model: int,
-                 bias: Optional[bool] = True,
-                 residual_embedding: Optional[bool] = True,
-                 hidden_features: Optional[int] = None,
-                 activation: Optional[str] = "relu") -> None:
+
+    def __init__(
+        self,
+        patch_len: int,
+        d_model: int,
+        bias: Optional[bool] = True,
+        residual_embedding: Optional[bool] = True,
+        hidden_features: Optional[int] = None,
+        activation: Optional[str] = "relu",
+    ) -> None:
         """
         :param patch_len: (int) the length of the patch of time series.
         :param d_model: (int) the dimension of the embedding model.
@@ -761,14 +761,16 @@ class TimeEmbeddings(nn.Module):
         :param activation: (str) the activation function for the residual embeddings.
         """
         super(self, TimeEmbeddings).__init__()
-        
+
         self.patch_len = patch_len
-        
-        self.hidden_features = hidden_features if hidden_features is not None else d_model // 2
-        
+
+        self.hidden_features = (
+            hidden_features if hidden_features is not None else d_model // 2
+        )
+
         # 是否要通过残差连接的方式进行时间序列的嵌入
         self.residual_embedding = residual_embedding
-        
+
         if self.residual_embedding is True:
             # 通过残差连接的方式进行时间序列的嵌入
             self.hidden_layer = nn.Linear(
@@ -780,18 +782,22 @@ class TimeEmbeddings(nn.Module):
             self.residual_layer = nn.Linear(
                 in_features=patch_len, out_features=d_model, bias=bias
             )
-        
+
             self.activation = get_activation(activation=activation)
-        
+
         else:
-            self.linear_embedding = nn.Linear(in_features=patch_len, out_features=d_model, bias=bias)
-        
-        
-    def forward(self, time_series: torch.Tensor, ) -> torch.Tensor:
+            self.linear_embedding = nn.Linear(
+                in_features=patch_len, out_features=d_model, bias=bias
+            )
+
+    def forward(
+        self,
+        time_series: torch.Tensor,
+    ) -> torch.Tensor:
         """
-        :param time_series: (Tensor) the input time series with shape of 
+        :param time_series: (Tensor) the input time series with shape of
                [batch_size * num_vars, num_tokens, patch_len];
-            
+
         :return: embeddings (Tensor) the output embedding of the time series data with shape of
                 [batch * num_vars, num_tokens, d_model]
         """
@@ -799,14 +805,14 @@ class TimeEmbeddings(nn.Module):
             # 计算隐藏层特征
             hid = self.activation(self.hidden_layer(time_series))
             out = self.output_layer(hid)
-            
+
             # 建立残差连接关系
             res = self.residual_layer(time_series)
             embeddings = out + res
-            
+
         else:
             embeddings = self.linear_embedding(time_series)
-        
+
         return embeddings
 
 

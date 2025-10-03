@@ -315,47 +315,47 @@ def inv_remap_state_dict(state_dict, config: PretrainedConfig):
         if not last_layer_subset or d != (config.num_hidden_layers - 1):
             Wqkv_weights = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wqkv.weight")
             Wqkv_biases = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wqkv.bias")
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.query.weight"
-            ] = Wqkv_weights[: Wqkv_weights.shape[0] // 3, :]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.key.weight"
-            ] = Wqkv_weights[
-                Wqkv_weights.shape[0] // 3 : 2 * Wqkv_weights.shape[0] // 3, :
-            ]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.value.weight"
-            ] = Wqkv_weights[2 * Wqkv_weights.shape[0] // 3 :, :]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.query.bias"
-            ] = Wqkv_biases[: Wqkv_biases.shape[0] // 3]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.key.bias"
-            ] = Wqkv_biases[Wqkv_biases.shape[0] // 3 : 2 * Wqkv_biases.shape[0] // 3]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.value.bias"
-            ] = Wqkv_biases[2 * Wqkv_biases.shape[0] // 3 :]
+            state_dict[f"bert.encoder.layers.{d}.attention.self.query.weight"] = (
+                Wqkv_weights[: Wqkv_weights.shape[0] // 3, :]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.key.weight"] = (
+                Wqkv_weights[
+                    Wqkv_weights.shape[0] // 3 : 2 * Wqkv_weights.shape[0] // 3, :
+                ]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.value.weight"] = (
+                Wqkv_weights[2 * Wqkv_weights.shape[0] // 3 :, :]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.query.bias"] = (
+                Wqkv_biases[: Wqkv_biases.shape[0] // 3]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.key.bias"] = (
+                Wqkv_biases[Wqkv_biases.shape[0] // 3 : 2 * Wqkv_biases.shape[0] // 3]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.value.bias"] = (
+                Wqkv_biases[2 * Wqkv_biases.shape[0] // 3 :]
+            )
         else:
             Wq_weight = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wq.weight")
             Wkv_weights = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wkv.weight")
             Wq_bias = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wq.bias")
             Wkv_biases = state_dict.pop(f"bert.encoder.layers.{d}.attn.Wkv.bias")
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.query.weight"
-            ] = Wq_weight
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.key.weight"
-            ] = Wkv_weights[: Wkv_weights.shape[0] // 2, :]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.value.weight"
-            ] = Wkv_weights[Wkv_weights.shape[0] // 2 :, :]
+            state_dict[f"bert.encoder.layers.{d}.attention.self.query.weight"] = (
+                Wq_weight
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.key.weight"] = (
+                Wkv_weights[: Wkv_weights.shape[0] // 2, :]
+            )
+            state_dict[f"bert.encoder.layers.{d}.attention.self.value.weight"] = (
+                Wkv_weights[Wkv_weights.shape[0] // 2 :, :]
+            )
             state_dict[f"bert.encoder.layers.{d}.attention.self.query.bias"] = Wq_bias
             state_dict[f"bert.encoder.layers.{d}.attention.self.key.bias"] = Wkv_biases[
                 : Wkv_biases.shape[0] // 2
             ]
-            state_dict[
-                f"bert.encoder.layers.{d}.attention.self.value.bias"
-            ] = Wkv_biases[Wkv_biases.shape[0] // 2 :]
+            state_dict[f"bert.encoder.layers.{d}.attention.self.value.bias"] = (
+                Wkv_biases[Wkv_biases.shape[0] // 2 :]
+            )
 
     def inv_key_mapping_ln(key):
         key = re.sub(r"bert.emb_ln.", "bert.embeddings.LayerNorm.", key)

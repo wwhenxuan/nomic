@@ -1971,9 +1971,9 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            attention_mask=attention_mask.bool()
-            if attention_mask is not None
-            else None,
+            attention_mask=(
+                attention_mask.bool() if attention_mask is not None else None
+            ),
         )
         sequence_output, _ = outputs.last_hidden_state, outputs.pooler_output
 
@@ -2035,9 +2035,9 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            attention_mask=attention_mask.bool()
-            if attention_mask is not None
-            else None,
+            attention_mask=(
+                attention_mask.bool() if attention_mask is not None else None
+            ),
         )
 
         pooled_output = outputs[1]

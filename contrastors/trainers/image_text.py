@@ -129,9 +129,11 @@ class ImageTextTrainer(TextTextTrainer):
                 num_workers=0,
                 collate_fn=lambda x: image_captions_collage_fn_prefix(
                     x,
-                    prefix="search_query"
-                    if self.config.text_model_args.add_prefix
-                    else None,
+                    prefix=(
+                        "search_query"
+                        if self.config.text_model_args.add_prefix
+                        else None
+                    ),
                 ),
             )
 
@@ -258,9 +260,9 @@ class ImageTextTrainer(TextTextTrainer):
                 tokenizer=self.tokenizer,
                 dataloader=dataloader,
                 return_embeddings=False,
-                prefix="search_query"
-                if self.config.text_model_args.add_prefix
-                else None,
+                prefix=(
+                    "search_query" if self.config.text_model_args.add_prefix else None
+                ),
             )
 
         top1 = gather(top1)

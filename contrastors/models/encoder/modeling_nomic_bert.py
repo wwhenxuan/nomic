@@ -142,15 +142,18 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             config.expert_choice_router = kwargs.pop("expert_choice_router", False)
             config.num_shared_experts = kwargs.pop("num_shared_experts", 0)
             config.moe_every_n_layers = kwargs.pop("moe_every_n_layers", 1)
-
+        
+        # TODO: 在这里创建的模型
         if "add_pooling_layer" in kwargs:
             config.add_pooling_layer = kwargs.pop("add_pooling_layer")
             model = cls(config, *inputs, add_pooling_layer=config.add_pooling_layer)
         else:
             model = cls(config, *inputs)
+            
         # TODO: fix this
         # Assuming we know what we're doing when loading from disk
         # Prob a bad assumption but i'm tired and want to train this asap
+        
         if os.path.exists(model_name):
             model_path = f"{model_name}/pytorch_model.bin"
             if os.path.exists(model_path):
@@ -164,6 +167,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             if ignore_mismatched_shapes:
                 state_dict = filter_shapes(state_dict, model)
             load_return = model.load_state_dict(state_dict, strict=False)
+            
         else:
             # TODO: can probably check config class and see if we need to remap from a bert model
             state_dict = state_dict_from_pretrained(model_name)
@@ -339,14 +343,23 @@ def _init_weights(module, initializer_range=0.02):
 
 
 class NomicBertEncoder(NomicBertPreTrainedModel):
+    """
+    Nomic中使用的Bert编码器对象
+    """
+
     def __init__(self, config: GPT2Config):
         super().__init__(config)
+
+        # 这里选择使用MoE架构还是Dense架构
         if getattr(config, "moe_every_n_layers", 0) > 0:
             every_n = config.moe_every_n_layers
+
+            # 这里创建不同模块的网络列表
             self.layers = nn.ModuleList(
                 [Block(config, moe=i % every_n == 1) for i in range(config.n_layer)]
             )
         else:
+            # 这里使用的是Dense架构
             self.layers = nn.ModuleList(
                 [Block(config, moe=False) for _ in range(config.n_layer)]
             )
@@ -456,6 +469,11 @@ class NomicBertEncoder(NomicBertPreTrainedModel):
 
 
 class NomicBertPooler(nn.Module):
+    """
+    在自然语言处理中这一操作主要用于抽取应用到下游任务中的特征，
+    通常是抽取单个的[CLS]标识，但是这里使用了整个序列的特征。
+    """
+
     def __init__(self, config):
         super().__init__()
         fused_bias_fc = getattr(config, "fused_bias_fc", False)
@@ -582,8 +600,14 @@ class NomicBertModel(NomicBertPreTrainedModel):
 
         self.embeddings = BertEmbeddings(config)
         self.emb_drop = nn.Dropout(config.resid_pdrop)
+
+        # TODO: 这里为什么要添加一个新的LayerNorm层
         self.emb_ln = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+
+        # 创建的编码器对象，这里带有了不同的网络层
         self.encoder = NomicBertEncoder(config)
+
+        # TODO: 这里的Pooler层是用来做什么的？抽取用用于下游任务的表征
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
         self.apply(partial(_init_weights, initializer_range=config.initializer_range))
@@ -601,6 +625,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
         layer output for these tokens.
         masked_tokens_mask: (batch, seqlen), dtype=torch.bool
         """
+        # 首先进行特征的嵌入
         hidden_states = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids
         )
@@ -612,6 +637,8 @@ class NomicBertModel(NomicBertPreTrainedModel):
             hidden_states = layer_norm(
                 hidden_states, self.emb_ln.weight, self.emb_ln.bias, self.emb_ln.eps
             )
+
+        # 进行特征的嵌入dropout
         hidden_states = self.emb_drop(hidden_states)
         if masked_tokens_mask is not None:
             batch_size, seqlen = input_ids.shape[:2]
@@ -662,9 +689,9 @@ class NomicBertModel(NomicBertPreTrainedModel):
                     ffn_hidden_size=self.config.n_inner,
                     num_layers=self.config.n_layer // self.config.moe_every_n_layers,
                     moe_loss_weight=self.config.router_aux_loss_coef,
-                    mlp_type="glu"
-                    if self.config.activation_function == "swiglu"
-                    else "mlp",
+                    mlp_type=(
+                        "glu" if self.config.activation_function == "swiglu" else "mlp"
+                    ),
                     fp16=False,
                     bf16=True,
                     return_bias=False,
@@ -751,9 +778,9 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            attention_mask=attention_mask.bool()
-            if attention_mask is not None
-            else None,
+            attention_mask=(
+                attention_mask.bool() if attention_mask is not None else None
+            ),
             masked_tokens_mask=masked_tokens_mask,
         )
         sequence_output, pooled_output = (
@@ -840,9 +867,9 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
             input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            attention_mask=attention_mask.bool()
-            if attention_mask is not None
-            else None,
+            attention_mask=(
+                attention_mask.bool() if attention_mask is not None else None
+            ),
             masked_tokens_mask=masked_tokens_mask,
         )
 

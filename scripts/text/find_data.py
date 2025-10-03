@@ -100,9 +100,11 @@ def process_yaml():
         metadata = {
             "objective": {
                 "type": "paired",
-                "columns": mc4_columns
-                if multilingual_bucket == "mc4-filtered"
-                else cc_news_columns,
+                "columns": (
+                    mc4_columns
+                    if multilingual_bucket == "mc4-filtered"
+                    else cc_news_columns
+                ),
             },
             "query_prefix": "search_query",
             "document_prefix": "search_document",

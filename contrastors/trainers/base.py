@@ -165,9 +165,9 @@ class BaseTrainer(metaclass=ABCMeta):
         ds_config["steps_per_print"] = float("inf")
 
         if ds_config["gradient_accumulation_steps"] == "auto":
-            ds_config[
-                "gradient_accumulation_steps"
-            ] = self.config.train_args.gradient_accumulation_steps
+            ds_config["gradient_accumulation_steps"] = (
+                self.config.train_args.gradient_accumulation_steps
+            )
 
         # todo this could use some love
         if ds_config["train_micro_batch_size_per_gpu"] == "auto":

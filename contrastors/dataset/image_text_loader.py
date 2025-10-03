@@ -524,9 +524,11 @@ def get_wds_image_text_dataset(
                     add_prefix=add_prefix,
                 ),
             ),
-            wds.to_tuple("image", "text", "json")
-            if not precomputed_text
-            else wds.to_tuple("image", "npy", "json"),
+            (
+                wds.to_tuple("image", "text", "json")
+                if not precomputed_text
+                else wds.to_tuple("image", "npy", "json")
+            ),
             # partial is a flag if we want to return partial batches
             wds.batched(
                 batch_size,

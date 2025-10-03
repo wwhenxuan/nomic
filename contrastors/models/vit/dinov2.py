@@ -47,9 +47,9 @@ def dino_config_to_vit_config(dino_config: Dinov2Config) -> GPT2Config:
         mlp_fc2_bias=getattr(dino_config, "mlp_fc2_bias", True),
         use_rms_norm=False,
         causal=False,
-        hidden_features_scaling_factor=2.0 / 3.0
-        if getattr(dino_config, "use_swiglu_ffn", False)
-        else 1.0,
+        hidden_features_scaling_factor=(
+            2.0 / 3.0 if getattr(dino_config, "use_swiglu_ffn", False) else 1.0
+        ),
         mask_token=True,
         learned_pos_embedding=True,
         patch_dropout=0.0,

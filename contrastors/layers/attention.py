@@ -26,7 +26,6 @@ class FlashAttention(nn.Module):
 
     def __init__(
         self,
-        
         embed_dim: int,
         n_heads: int,
         config,
@@ -49,13 +48,13 @@ class FlashAttention(nn.Module):
             if getattr(config, "num_heads_kv", None) is not None
             else self.num_heads
         )
-        
+
         # 获取每个注意力机制的具体维度
         assert (
             self.embed_dim % self.num_heads == 0
         ), "embed_dim must be divisible by num_heads"
         self.head_dim = self.embed_dim // self.num_heads
-        
+
         # we don't really support mqa / gqa for now
         qkv_dim = self.head_dim * (self.num_heads + 2 * self.num_heads_kv)
 
@@ -108,7 +107,7 @@ class FlashAttention(nn.Module):
         self.out_proj = linear_cls(
             self.embed_dim, self.embed_dim, bias=config.qkv_proj_bias
         )
-        
+
         self.causal = config.causal
         self.drop = nn.Dropout(config.attn_pdrop)
         self.num_prefix_tokens = max(getattr(config, "register_tokens", 1), 1)
@@ -135,7 +134,7 @@ class FlashAttention(nn.Module):
             past_len = 0
 
         qkv = self.Wqkv(hidden_states)
-        
+
         # 单次QKV投影提高效率
         if self.num_heads == self.num_heads_kv:
             # 标准多头注意力：Q、K、V头数相同
