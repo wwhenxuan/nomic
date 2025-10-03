@@ -323,6 +323,7 @@ class BaseTrainer(metaclass=ABCMeta):
         return model
 
     def save_model(self, output_dir):
+        # FIXME: 在这里保存的模型参数
         if self.global_rank == 0:
             unwrapped = self.unwrap(self.model["model"])
             if self.deepspeed:

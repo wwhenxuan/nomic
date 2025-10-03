@@ -1,3 +1,7 @@
+"""
+这个文件用于将模型参数上传到huggingface中
+"""
+
 from argparse import ArgumentParser
 
 from contrastors.models.biencoder import BiEncoder, BiEncoderConfig

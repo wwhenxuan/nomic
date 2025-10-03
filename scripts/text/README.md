@@ -2,6 +2,8 @@
 
 ## Pretokenizing Data for Masked Language Modeling
 
+<font color="red">这里的第一步是处理用于预训练的数据</font>
+
 To train `nomic-bert-2048`, we use [Wikipedia](https://huggingface.co/datasets/wikimedia/wikipedia) and [Bookscorpus](https://huggingface.co/datasets/bookcorpus) which is the same training data as the original [BERT](https://arxiv.org/abs/1810.04805).
 
 We pack the data into sentences of 2048 tokens using the `bert-base-uncased` tokenizer. If a sentence is shorter than 2048 tokens, we pack the sentence with the next sentence until we reach 2048 tokens. If a sentence is longer than 2048 tokens, we split the sentence into 2048 token chunks.

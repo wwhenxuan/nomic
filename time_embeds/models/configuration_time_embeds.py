@@ -4,11 +4,7 @@ from transformers import GPT2Config, PretrainedConfig
 class TimeEmbedsConfig(PretrainedConfig):
     model_type = "time_embeds"
 
-    def __init__(self, 
-                 patch_len: int,
-                 d_model: int,
-                 
-                 **kwargs):
+    def __init__(self, patch_len: int, d_model: int, **kwargs):
         super().__init__(**kwargs)
 
 

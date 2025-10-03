@@ -142,18 +142,18 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             config.expert_choice_router = kwargs.pop("expert_choice_router", False)
             config.num_shared_experts = kwargs.pop("num_shared_experts", 0)
             config.moe_every_n_layers = kwargs.pop("moe_every_n_layers", 1)
-        
+
         # TODO: 在这里创建的模型
         if "add_pooling_layer" in kwargs:
             config.add_pooling_layer = kwargs.pop("add_pooling_layer")
             model = cls(config, *inputs, add_pooling_layer=config.add_pooling_layer)
         else:
             model = cls(config, *inputs)
-            
+
         # TODO: fix this
         # Assuming we know what we're doing when loading from disk
         # Prob a bad assumption but i'm tired and want to train this asap
-        
+
         if os.path.exists(model_name):
             model_path = f"{model_name}/pytorch_model.bin"
             if os.path.exists(model_path):
@@ -167,7 +167,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             if ignore_mismatched_shapes:
                 state_dict = filter_shapes(state_dict, model)
             load_return = model.load_state_dict(state_dict, strict=False)
-            
+
         else:
             # TODO: can probably check config class and see if we need to remap from a bert model
             state_dict = state_dict_from_pretrained(model_name)
@@ -578,6 +578,8 @@ class NomicBertPreTrainingHeads(nn.Module):
 
 
 class NomicBertModel(NomicBertPreTrainedModel):
+    """一般性的供我们使用的那个模型"""
+
     def __init__(self, config: GPT2Config, add_pooling_layer=True):
         super().__init__(config)
         self.pad_vocab_size_multiple = getattr(config, "pad_vocab_size_multiple", 1)
@@ -714,6 +716,8 @@ class NomicBertModel(NomicBertPreTrainedModel):
 
 
 class NomicBertForPreTraining(NomicBertPreTrainedModel):
+    """用于预训练的模型 输出预训练的损失"""
+
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config: GPT2Config):
@@ -729,16 +733,22 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         use_xentropy = getattr(config, "use_xentropy", False)
         if use_xentropy and CrossEntropyLoss is None:
             raise ImportError("xentropy_cuda is not installed")
+
+        # 创建使用的损失函数
         loss_cls = (
             nn.CrossEntropyLoss
             if not use_xentropy
             else partial(CrossEntropyLoss, inplace_backward=True)
         )
 
+        # TODO: 创建使用的模型
         self.bert = NomicBertModel(
             config, add_pooling_layer=getattr(config, "add_pooling_layer", False)
         )
+
+        #
         self.cls = NomicBertPreTrainingHeads(config)
+
         self.mlm_loss = loss_cls()
 
         # Initialize weights and apply final processing
@@ -783,6 +793,8 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
             ),
             masked_tokens_mask=masked_tokens_mask,
         )
+
+        #
         sequence_output, pooled_output = (
             outputs.last_hidden_state,
             outputs.pooler_output,
